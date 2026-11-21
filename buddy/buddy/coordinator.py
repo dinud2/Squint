@@ -130,9 +130,9 @@ class Coordinator:
                 parts.append(f"{name}, you're all done for today.")
         self.say("Hi " + " ".join(parts))
         todo = [(pid, self.med_list(pid)) for pid in arrived if self.med_list(pid)]
-        if todo:
+        if todo:   # Tab5: "Hi Dinu!" with the medicines to take underneath
             pid, meds = todo[0]
-            self.show(f"remind {meds[0]}|{self.store.name(pid)}: {join_names(meds)}")
+            self.show(f"remind Hi {self.store.name(pid)}!|{', '.join(meds)}")
         else:
             self.show(f"greet {first}")
 

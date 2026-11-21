@@ -1,8 +1,8 @@
 """Who is at the counter, steadily: turns noisy per-frame face results into
 "people_present" changes the speaker can act on.
 
-* someone joins the group only after being recognised for JOIN_S (1 s) on at least
-  JOIN_FRAMES frames: a passer-by or one lucky frame doesn't trigger a greeting
+* someone joins the group after being recognised on JOIN_FRAMES (2) frames in a row over
+  JOIN_S (0.2 s): fast enough to feel instant, but one lucky frame doesn't trigger a greeting
 * someone leaves only after not being recognised for LEAVE_S (3 s): turning your head,
   bending down or a missed frame doesn't make the speaker greet you again
 * "unknown" faces are counted, never named
@@ -10,8 +10,8 @@
 
 
 class Presence:
-    JOIN_S = 1.0
-    JOIN_FRAMES = 3
+    JOIN_S = 0.2         # walk up -> greeted after 2 face frames, ~0.25 s on the Pi (~4 frames/s)
+    JOIN_FRAMES = 2      # two frames in a row agreeing is enough; one stray frame still is not
     LEAVE_S = 3.0
     STREAK_GAP_S = 0.5   # a joining streak restarts after a gap this long (stray frames don't add up)
 
