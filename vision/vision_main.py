@@ -31,6 +31,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
 ENROL_SHOTS = 15
 ENROL_SECONDS = 6.0
+ENROL_TIMEOUT_S = 20.0
+PERSON_MIN = 0.3      # nose and at least one shoulder must be this confident
+HAND_MIN = 0.3        # ...and the wrist we crop around
+
+
+def person_present(kps):
+    return kps[P.NOSE, 2] >= PERSON_MIN and max(kps[P.LSHO, 2], kps[P.RSHO, 2]) >= PERSON_MIN
 
 
 class Vision:
@@ -48,6 +55,7 @@ class Vision:
         self.lock = threading.Lock()
         self.last_jpg_t = 0.0
         self.recent_cands = []     # candidate sets from the last 5 frames
+        self.person = False
         self.load_meds()
 
     # ---------------- bus handlers
@@ -78,24 +86,32 @@ class Vision:
             if self.pose is None:
                 self.pose = P.Pose()
             kps = self.pose(frame)
-        side = self.intake.stream.side or P.active_hand(kps)
-        if crop is None and frame is not None:
-            if side and kps[P.LWRI if side == "l" else P.RWRI, 2] > 0.2:
-                x0, y0, x1, y1 = P.hand_crop_box(kps, side, frame.shape)
-                crop = frame[y0:y1, x0:x1] if x1 - x0 > 16 and y1 - y0 > 16 else None
+        # MoveNet always returns 17 points, even for an empty room (low-confidence guesses).
+        # Only trust a hand crop when a person AND a wrist are confidently there.
+        self.person = person_present(kps)
+        side = self.intake.stream.side or P.active_hand(kps, min_score=HAND_MIN)
+        hand_ok = self.person and side is not None and kps[P.LWRI if side == "l" else P.RWRI, 2] >= HAND_MIN
+        if crop is None and frame is not None and hand_ok:
+            x0, y0, x1, y1 = P.hand_crop_box(kps, side, frame.shape)
+            crop = frame[y0:y1, x0:x1] if x1 - x0 > 16 and y1 - y0 > 16 else None
         self.frame_i += 1
 
-        # enrolment has priority over recognition
+        # enrolment has priority over recognition; it only ever uses real hand crops
         with self.lock:
             en = self.enrol
         if en is not None:
-            self._enrol_step(t, en, crop if crop is not None else frame)
+            self._enrol_step(t, en, crop)
             return kps, crop, None
 
         label = None
-        if crop is not None and self.frame_i % self.bottle_every == 0:
-            label, conf, scores = self.gallery.classify(self.embed(crop))
-            self.recent_cands = (self.recent_cands + [self.gallery.candidates(scores)])[-5:]
+        if self.frame_i % self.bottle_every == 0:
+            if crop is not None:
+                label, conf, scores = self.gallery.classify(self.embed(crop))
+                self.recent_cands = (self.recent_cands + [self.gallery.candidates(scores)])[-5:]
+            else:
+                # nobody / no hand in view: there is no bottle in a hand. Feeding "none"
+                # lets the smoother drop a stale "warfarin" within ~4 frames.
+                label, conf = "none", 0.0
             ch = self.tracker.update(label, conf)
             if ch:
                 ev = {"type": "bottle_seen", "med": ch[0], "confidence": round(ch[1], 3), "frame_time": t}
@@ -117,7 +133,22 @@ class Vision:
         return sorted(c for c, n in counts.items() if n >= 2)
 
     def _enrol_step(self, t, en, img):
-        if img is None or t < en["next_t"]:
+        en.setdefault("start_t", t)
+        if img is None:
+            # no confident hand: never fall back to the whole frame (that teaches it the room)
+            if not en.get("hinted") and t - en["start_t"] > 3 and not en["shots"]:
+                en["hinted"] = True
+                self.send({"type": "enroll_progress", "med": en["med"], "percent": 0,
+                           "hint": "I can't see your hand. Stand back so your head, shoulders and the hand "
+                                   "holding the bottle are in view, bottle at chest height."})
+            if t - en["start_t"] > ENROL_TIMEOUT_S:
+                self.send({"type": "enroll_progress", "med": en["med"], "percent": -1,
+                           "error": f"enrolment stopped: only {len(en['shots'])} of {ENROL_SHOTS} photos had a "
+                                    "visible hand. Nothing was saved; try again further back."})
+                with self.lock:
+                    self.enrol = None
+            return
+        if t < en["next_t"]:
             return
         en["shots"].append(img.copy())
         en["next_t"] = t + ENROL_SECONDS / ENROL_SHOTS
@@ -155,7 +186,12 @@ def draw(frame, kps, v, label):
     if side:
         x0, y0, x1, y1 = P.hand_crop_box(kps, side, frame.shape)
         cv2.rectangle(frame, (x0, y0), (x1, y1), (255, 200, 0), 2)
-    cv2.putText(frame, f"bottle: {v.tracker.current}  frame: {label}", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+    who = "person" if v.person else "NO PERSON (bottle check off)"
+    cv2.putText(frame, f"{who}  bottle: {v.tracker.current}  frame: {label}", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                (255, 255, 255) if v.person else (0, 165, 255), 2)
+    if v.enrol is not None:
+        cv2.putText(frame, f"ENROLLING {v.enrol['med']}: {len(v.enrol['shots'])}/{ENROL_SHOTS}  (hand must be visible)",
+                    (10, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
     cv2.putText(frame, f"intake p={v.intake.last_p:.2f} state={v.intake.state}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                 (0, 0, 255) if v.intake.state != "idle" else (255, 255, 255), 2)
     return frame
