@@ -49,9 +49,15 @@ class Frames:
             time.sleep(0.05)
 
 
-def face_loop(src, hub, det_scale, verbose):
+def face_loop(src, hub, det_scale, verbose, coord=None):
     presence = Presence()
     fid = FaceID(det_scale=det_scale)
+    h2m = None
+    try:
+        from .intake import HandToMouth
+        h2m = HandToMouth()
+    except Exception as e:                      # no palm model: everything else still works
+        print("[buddy] hand-to-mouth off:", e, flush=True)
     print(f"[buddy] faces from {src}, enrolled {sorted(fid.people)}", flush=True)
     hub.diag.faces["source"] = src
     cam = Frames(src, "face")
@@ -74,6 +80,15 @@ def face_loop(src, hub, det_scale, verbose):
         group = presence.update(t, names, unknown)
         if group is not None:
             hub.publish({"type": "people_present", "people": group, "unknown": unknown})
+        # hand to mouth, only while a dose is waiting for "Did you take it?"
+        if h2m is not None and coord is not None and coord.pending:
+            try:
+                ev = h2m.update(t, frame, seen, coord.pending)
+            except Exception as e:
+                print("[buddy] hand-to-mouth frame skipped:", e, flush=True)
+                ev = None
+            if ev:
+                hub.publish(ev)
 
 
 def bottle_loop(src, hub, bottles, fps, verbose):
@@ -126,7 +141,7 @@ def main():
                                       args=(a.bottle_source, hub, bottles, a.bottle_fps, a.verbose)))
     if a.face_source:
         loops.append(threading.Thread(target=face_loop, daemon=True,
-                                      args=(a.face_source, hub, a.det_scale, a.verbose)))
+                                      args=(a.face_source, hub, a.det_scale, a.verbose, coord)))
     for th in loops:
         th.start()
     while True:
