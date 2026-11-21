@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# big / regenerable: run vision/tools/export_models.py
+vision/models/*.onnx
+vision/data/

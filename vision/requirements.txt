@@ -1,0 +1,9 @@
+# runtime (laptop and Pi)
+numpy
+opencv-python
+onnxruntime
+# laptop only: model export + plots
+torch
+torchvision
+onnx
+matplotlib
