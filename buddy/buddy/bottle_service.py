@@ -92,6 +92,7 @@ class BottleService:
         self.hub = hub
         self.lock = threading.Lock()          # cv2.dnn nets are not thread-safe
         self.last_img = None
+        self.last = {"name": "unknown", "score": 0.0, "scores": {}, "t": 0.0, "shown": None}
 
     def frame(self, jpg):
         img = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
@@ -106,12 +107,14 @@ class BottleService:
         with self.lock:
             if self.mode == "show":
                 c, box = center_crop(img)
-                name, score, _ = self.gallery.identify(self.emb(c))
+                name, score, sc = self.gallery.identify(self.emb(c))
                 if name == OTHER:
                     name = "unknown"
                 out = [{"name": name, "score": round(score, 3), "box": box}]
                 events = self.show.update(time.time(), name, score)
                 on_counter = []
+                self.last = {"name": name, "score": round(score, 3), "t": time.time(), "shown": self.show.shown,
+                             "scores": {k: round(v, 3) for k, v in sorted(sc.items(), key=lambda kv: -kv[1])}}
             else:
                 out = []
                 for b in self.det(img)[:6]:
@@ -175,6 +178,10 @@ class BottleService:
             if os.path.exists(p):
                 os.remove(p)
         return {"name": name, "removed": True}
+
+    def live(self):
+        """GET /bottles/last: what the bottle check saw in its newest frame."""
+        return dict(self.last, age_s=round(time.time() - self.last["t"], 2) if self.last["t"] else None)
 
     def info(self):
         return {"mode": self.mode, "bottles": {n: len(g) for n, g in self.gallery.items.items()}}

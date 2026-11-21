@@ -1,26 +1,24 @@
 #!/bin/sh
-# Squint: start both camera streams and the recognition/coordinator service.
-# After a reboot:  ssh qnxuser@<pi> ./squint_start.sh
-#   :8080  Logitech Brio 101 (camera unit 8), pointing DOWN at the counter -> bottles
-#   :8082  Logitech C270     (camera unit 5), pointing UP at the person    -> faces
+# Squint: start the camera stream and the recognition/coordinator service.
+# After a reboot (or a camera unplug/replug):  ssh qnxuser@<pi> ./squint_start.sh
+#   :8080  Logitech C270 (camera unit 5) at the person: faces, and bottles held up to it
+#   :8081  buddy.service (API, coordinator); /cams shows the camera
 # Optional: SQUINT_ARGS="--announce http://<laptop>:8765/announce" ./squint_start.sh
 H=/data/home/qnxuser
-for p in $(pidin -F "%a %N" | awk "\$2==\"camstream\" || \$2==\"python3\" {print \$1}"); do kill $p; done
+for p in $(pidin -F "%a %N" | awk '$2=="camstream" || $2=="python3" {print $1}'); do kill $p; done
 sleep 2
 # A camera that was unplugged and plugged back in does not come back by itself: QNX's
-# camera service drops its unit. If either unit is missing, restart the camera service.
-if [ ! -e /dev/sensor/camera5 ] || [ ! -e /dev/sensor/camera8 ]; then
+# camera service drops its unit. If it is missing, restart the camera service.
+if [ ! -e /dev/sensor/camera5 ]; then
   echo "camera unit missing: restarting the camera service"
   SP=$(sudo pidin arg | awk '$2=="sensor" && $3=="-U" {print $1}')
   [ -n "$SP" ] && sudo kill $SP && sleep 2
   sudo sh -c "nohup sensor -U 521:521 -b external -r /data/share/sensor -c /etc/config/sensor/sensor_rpi5.conf > /dev/null 2>&1 < /dev/null &"
   waitfor /dev/sensor/camera5 10
-  waitfor /dev/sensor/camera8 10
 fi
 cd $H/stream
-(on -p 20 ./camstream 8 8080 80 1280 720 5 > camstream_bottles.log 2>&1 &)
-(on -p 20 ./camstream 5 8082 75 960 544 20 > camstream_faces.log 2>&1 &)
+(on -p 20 ./camstream 5 8080 75 960 544 20 > camstream.log 2>&1 &)
 sleep 3
 cd $H/buddy && (nohup python3 -u -m buddy.service --bottle-source http://localhost:8080/stream \
-    --face-source http://localhost:8082/stream $SQUINT_ARGS > service.log 2>&1 &)
-echo "started: bottles :8080 (Brio), faces :8082 (C270), service :8081; logs in ~/stream and ~/buddy"
+    --face-source http://localhost:8080/stream $SQUINT_ARGS > service.log 2>&1 &)
+echo "started: C270 :8080 (faces + bottles), service :8081 (/cams); logs in ~/stream and ~/buddy"
