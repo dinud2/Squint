@@ -97,6 +97,7 @@ def main():
     ap.add_argument("--batch", type=int, default=64)
     ap.add_argument("--families", type=int, default=300)
     ap.add_argument("--per_family", type=int, default=3)
+    ap.add_argument("--out", default=os.path.join(HERE, "models", "bottle_embed.onnx"))
     a = ap.parse_args()
     dev = "mps" if torch.backends.mps.is_available() else "cpu"
     rng = np.random.default_rng(0)
@@ -125,7 +126,7 @@ def main():
             acc = (logits.argmax(1) == yt).float().mean().item()
             print(f"step {step:5d} loss {loss.item():.3f} batch-acc {acc:.2f} ({time.time()-t0:.0f}s)", flush=True)
     net = net.cpu().eval()
-    path = os.path.join(HERE, "models", "bottle_embed.onnx")
+    path = a.out
     torch.onnx.export(net, torch.zeros(1, 3, 224, 224), path, input_names=["input"], output_names=["embedding"],
                       opset_version=13, dynamo=False)
     print("wrote", path)

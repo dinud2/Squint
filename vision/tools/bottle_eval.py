@@ -50,15 +50,25 @@ def seq_metrics(gal, rng, emb, n_seq=40, frames=10):
     """Pick-ups: 10 frames each, through the 4-of-5 tracker, like vision_main."""
     res = {"right": 0, "wrong": 0, "unknown_or_none": 0, "n": 0}
     unk_wrong = unk_n = 0
+    cand_hit = cand_n = 0
+    cand_sizes = []
     for med, spec in list(BOTTLES.items()) + [("unknown:" + k, v) for k, v in UNKNOWN.items()]:
         for _ in range(n_seq if med in BOTTLES else n_seq // 2):
             tr = BottleTracker()
             said = set()
+            counts = {}
             for _ in range(frames):
-                lab, conf, _ = gal.classify(emb(render(spec, rng, "test")))
+                lab, conf, sc = gal.classify(emb(render(spec, rng, "test")))
+                for c in gal.candidates(sc):
+                    counts[c] = counts.get(c, 0) + 1
                 ch = tr.update(lab, conf)
                 if ch:
                     said.add(ch[0])
+            cands = {c for c, n in counts.items() if n >= 2}
+            if med in BOTTLES and "unknown" in said and med not in said:
+                cand_n += 1
+                cand_hit += med in cands
+                cand_sizes.append(len(cands))
             named = {s for s in said if s in BOTTLES}
             if med in BOTTLES:
                 res["n"] += 1
@@ -73,7 +83,9 @@ def seq_metrics(gal, rng, emb, n_seq=40, frames=10):
                 unk_wrong += bool(named)
     return {"enrolled_pickups": res["n"], "named_right": res["right"] / res["n"], "named_wrong": res["wrong"] / res["n"],
             "only_unknown": res["unknown_or_none"] / res["n"],
-            "unknown_pickups": unk_n, "unknown_named_as_a_med": unk_wrong / max(unk_n, 1)}
+            "unknown_pickups": unk_n, "unknown_named_as_a_med": unk_wrong / max(unk_n, 1),
+            "when_unknown_truth_in_candidates": cand_hit / max(cand_n, 1),
+            "mean_candidates": float(np.mean(cand_sizes)) if cand_sizes else 0.0}
 
 
 def main():

@@ -21,7 +21,7 @@ mouth; None for negatives).
 """
 import numpy as np
 
-F, W, H = 500.0, 640, 480
+F, W, H = 330.0, 640, 480    # Pi Camera Module 3 Wide (~102 deg diagonal) at 640x480
 NOSE, LEYE, REYE, LEAR, REAR, LSHO, RSHO, LELB, RELB, LWRI, RWRI, LHIP, RHIP = range(13)
 
 POSITIVE = ["bottle_to_mouth", "palm_to_mouth", "bottle_to_mouth_slow", "hesitant_intake"]
@@ -58,9 +58,9 @@ class Person:
         k = rng.uniform(0.85, 1.15)
         self.k = k
         self.L1, self.L2 = 0.30 * k, 0.26 * k
-        self.Z = rng.uniform(0.45, 1.0)
+        self.Z = rng.uniform(0.5, 1.0)
         self.x0 = rng.uniform(-0.12, 0.12)
-        self.y_sh = rng.uniform(-0.18, 0.02)      # shoulders vs camera height
+        self.y_sh = rng.uniform(-0.06, 0.10)      # shoulders vs camera (camera ~chin/chest height, face in view)
         self.yaw = rng.uniform(-0.45, 0.45)
         self.roll = rng.uniform(-0.08, 0.08)
         self.hand = "r" if rng.random() < 0.75 else "l"
@@ -159,7 +159,7 @@ def simulate(kind, rng, fps=None):
     sway_f, sway_a = rng.uniform(0.1, 0.4), rng.uniform(0.002, 0.012)
     other_rest = np.array([(1 if side == "r" else -1) * 0.04, 0.33 * k, -0.15])
 
-    roll, cy_off = P.roll, rng.uniform(-30, 30)
+    roll, cy_off = P.roll, rng.uniform(-20, 20)
     arc = rng.uniform(0.03, 0.10)            # hand path bulges forward/out
     over = rng.uniform(0.0, 0.25) if kind == "aborted_raise" else 1.0
     tilt_max = rng.uniform(0.05, 0.25) if kind in ("bottle_to_mouth", "bottle_to_mouth_slow", "hesitant_intake",
@@ -261,6 +261,8 @@ def simulate(kind, rng, fps=None):
         noise_state = 0.6 * noise_state + 0.4 * rng.normal(0, 1, (17, 2)) * sig[:, None]
         kps[fi, :, :2] += noise_state
         kps[fi, :13, 2] = np.clip(kps[fi, :13, 2] + rng.normal(0, 0.05, 13), 0, 1)
+        out = (kps[fi, :, 0] < 0) | (kps[fi, :, 0] >= W) | (kps[fi, :, 1] < 0) | (kps[fi, :, 1] >= H)
+        kps[fi, out, 2] = np.minimum(kps[fi, out, 2], rng.uniform(0.0, 0.15))   # MoveNet can't see off-frame points
         if rng.random() < 0.03:                     # dropout of the active wrist
             kps[fi, wr_i, 2] = rng.uniform(0.0, 0.18)
         if rng.random() < 0.01:                     # wrist glitch

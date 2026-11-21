@@ -5,7 +5,8 @@
     python vision_main.py --source clip.mp4 --show   # replay a recorded clip
     python vision_main.py --sim double               # no camera: simulated person + bottles
 
-Sends:    bottle_seen {med, confidence}  (med = id | "unknown" | "none"; only on change)
+Sends:    bottle_seen {med, confidence, candidates}  (med = id | "unknown" | "none"; only on change)
+          candidates = enrolled bottles it could be (look-alikes): D confirms with the NFC tag
           intake_start {confidence, lead_ms, med, frame_time}
           intake_done {med}
           enroll_progress {med, percent}
@@ -46,6 +47,7 @@ class Vision:
         self.enrol = None          # {"med", "shots": [], "next_t"}
         self.lock = threading.Lock()
         self.last_jpg_t = 0.0
+        self.recent_cands = []     # candidate sets from the last 5 frames
         self.load_meds()
 
     # ---------------- bus handlers
@@ -92,16 +94,27 @@ class Vision:
 
         label = None
         if crop is not None and self.frame_i % self.bottle_every == 0:
-            label, conf, _ = self.gallery.classify(self.embed(crop))
+            label, conf, scores = self.gallery.classify(self.embed(crop))
+            self.recent_cands = (self.recent_cands + [self.gallery.candidates(scores)])[-5:]
             ch = self.tracker.update(label, conf)
             if ch:
-                self.send({"type": "bottle_seen", "med": ch[0], "confidence": round(ch[1], 3), "frame_time": t})
+                ev = {"type": "bottle_seen", "med": ch[0], "confidence": round(ch[1], 3), "frame_time": t}
+                if ch[0] == "unknown":
+                    ev["candidates"] = self.stable_candidates()
+                self.send(ev)
         armed = self.tracker.current != "none"
         for ev in self.intake.update(t, kps, armed):
             ev["med"] = self.tracker.current
             ev["frame_time"] = t
             self.send(ev)
         return kps, crop, label
+
+    def stable_candidates(self):
+        counts = {}
+        for cs in self.recent_cands:
+            for c in cs:
+                counts[c] = counts.get(c, 0) + 1
+        return sorted(c for c, n in counts.items() if n >= 2)
 
     def _enrol_step(self, t, en, img):
         if img is None or t < en["next_t"]:

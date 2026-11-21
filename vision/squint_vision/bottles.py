@@ -77,6 +77,15 @@ class Gallery:
             out[med] = float(s[:k].mean())
         return out
 
+    def candidates(self, scores, window=0.10):
+        """Enrolled bottles that are plausible for this view (for the NFC cross-check)."""
+        real = {m: s for m, s in scores.items() if m != EMPTY}
+        if not real:
+            return []
+        best = max(real.values())
+        floor = self.t["accept"] - window
+        return sorted(m for m, s in real.items() if s >= floor and s >= best - window)
+
     def classify(self, emb):
         """-> (label, confidence, scores). label is a med id, 'unknown' or 'none'."""
         sc = self.scores(emb)
