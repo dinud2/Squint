@@ -22,6 +22,7 @@ import urllib.request
 
 AUTO_CONFIRM = 0.90
 AUTO_DELAY_S = 2.0
+GREET_COOLDOWN_S = 120    # people step in and out at a counter: say hello at most once per 2 min
 
 
 def join_names(xs):
@@ -60,6 +61,7 @@ class Coordinator:
         self.tab5 = Tab5Queue()
         self.present = []
         self.pending = None                     # {"med", "for", "t"} waiting for "did you take it?"
+        self.last_greet = {}                    # person -> time of the last spoken greeting
         self.lock = threading.Lock()
         hub.listeners.append(self.on_event)
 
@@ -111,7 +113,14 @@ class Coordinator:
         if not arrived:
             return
         first = self.store.name(arrived[0])
-        self.show(f"presence {first}")
+        self.show(f"presence {first}")          # the face always wakes up
+        now = time.time()
+        to_greet = [p for p in arrived if now - self.last_greet.get(p, -1e9) >= GREET_COOLDOWN_S]
+        for p in to_greet:
+            self.last_greet[p] = now
+        if not to_greet:
+            return
+        arrived = to_greet
         parts = []
         for pid in arrived:
             name, meds = self.store.name(pid), self.med_list(pid)
