@@ -28,6 +28,27 @@ On the Pi you only need `numpy`, `opencv` and (ideally) `onnxruntime`, plus the 
 | Tests | `python tests/test_part_c.py` |
 | Speed per stage | `python tools/speed_test.py` |
 
+## Cameras: test first, then plug in
+
+Dinu's `pi/camstream.c` (branch `pi-camera-stream`) owns the QNX camera and serves MJPEG at
+`http://<pi>:8080/stream`. Vision reads that stream (only one process can hold the camera).
+
+```bash
+# 1. no Pi needed: a stand-in camstream on the laptop (webcam, clip, or test pattern)
+python tools/fake_camstream.py --source 0
+python tools/camera_check.py --source http://localhost:8080/stream --show
+
+# 2. the real Pi, from the laptop (same Wi-Fi / phone hotspot)
+python tools/camera_check.py --source http://<pi-ip>:8080/stream --show
+python vision_main.py --source http://<pi-ip>:8080/stream --show
+
+# 3. on the Pi itself (needs python3 + numpy + opencv, ideally onnxruntime: task C3)
+python3 vision_main.py --source http://localhost:8080/stream --bottle-every 2
+```
+
+`camera_check` must show **nose ≥ 80%** and a wrist visible when you raise a hand to your mouth.
+If the face is cut off, move the camera back or tilt it (the simulator says a wide lens is needed at 60 cm).
+
 ## What Part C puts on the bus
 
 | Message | Fields | Notes |
