@@ -19,6 +19,8 @@ fi
 cd $H/stream
 (on -p 20 ./camstream 5 8080 75 960 544 20 > camstream.log 2>&1 &)
 sleep 3
+# Dose times are local (Toronto); the Pi clock is UTC, so give the service the time zone.
+export TZ="${SQUINT_TZ:-EST5EDT,M3.2.0,M11.1.0}"
 cd $H/buddy && (nohup python3 -u -m buddy.service --bottle-source http://localhost:8080/stream \
     --face-source http://localhost:8080/stream $SQUINT_ARGS > service.log 2>&1 &)
 echo "started: C270 :8080 (faces + bottles), service :8081 (/cams); logs in ~/stream and ~/buddy"

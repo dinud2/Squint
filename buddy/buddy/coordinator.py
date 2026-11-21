@@ -159,6 +159,9 @@ class Coordinator:
             name, meds = self.store.name(pid), self.med_list(pid)
             if meds:
                 parts.append(f"{name}, today you take {join_names(meds)}.")
+            elif self.store.upcoming(pid):
+                nxt = self.store.upcoming(pid)[0]
+                parts.append(f"{name}, nothing right now. Your next medicine is {self.store.med(nxt['med'])['name']} at {nxt['due']}.")
             else:
                 parts.append(f"{name}, you're all done for today.")
         self.say("Hi " + " ".join(parts))
@@ -183,6 +186,14 @@ class Coordinator:
             return
         taken = self.store.taken_today(bottle, owner)
         open_this = [d for d in self.store.open_doses(owner) if d["med"] == bottle]
+        later = self.store.upcoming(owner, bottle)
+        # Not time yet (doses open 1 h before): amber "not yet", not the red STOP. High-risk
+        # medicines already taken today still get STOP below.
+        if not open_this and later and not (taken and m.get("risk") == "high"):
+            self.log("not_yet", owner, med=bottle, next=later[0]["due"])
+            self.show(f"concerned Not yet|Next {mname} at {later[0]['due']}")
+            self.say(f"Not yet, {oname}. Your next {mname} is at {later[0]['due']}.")
+            return
         # high risk: never a second dose the same day; otherwise only if no dose of it is left today
         if taken and (m.get("risk") == "high" or not open_this):
             at = taken[-1]["at"]

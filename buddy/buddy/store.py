@@ -13,6 +13,7 @@ import time
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STORE = os.path.join(HERE, "data", "store.json")
 WINDOW_MIN = 120          # a dose is "due" until 2 h after its time, then "missed"
+OPEN_BEFORE_MIN = 60      # ...and can be taken from 1 h before its time (earlier = "not yet")
 
 SEED = {
     "people": [
@@ -140,8 +141,17 @@ class Store:
         return sorted(out, key=lambda d: (d["due"], d["for"], d["med"]))
 
     def open_doses(self, pid, now=None):
-        """Doses this person still has to take today (due or missed, not yet taken)."""
-        return [d for d in self.today(now) if d["for"] == pid and d["status"] in ("due", "missed")]
+        """Doses this person can take now: not taken yet, and from 1 h before their time on
+        (a 20:00 dose is not open at 10:00, so a second Tylenol then is 'not yet')."""
+        nowm = _mins(_hm(now or time.time()))
+        return [d for d in self.today(now) if d["for"] == pid and d["status"] in ("due", "missed")
+                and nowm >= _mins(d["due"]) - OPEN_BEFORE_MIN]
+
+    def upcoming(self, pid, mid=None, now=None):
+        """Doses later today that are not open yet (earliest first)."""
+        nowm = _mins(_hm(now or time.time()))
+        return [d for d in self.today(now) if d["for"] == pid and d["status"] == "due"
+                and (mid is None or d["med"] == mid) and nowm < _mins(d["due"]) - OPEN_BEFORE_MIN]
 
     def taken_today(self, mid, pid, now=None):
         return [d for d in self.today(now) if d["med"] == mid and d["for"] == pid and d["status"] in ("taken", "flagged")]
