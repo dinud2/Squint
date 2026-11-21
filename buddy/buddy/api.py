@@ -86,12 +86,12 @@ CAMS_PAGE = """<!doctype html>
   figcaption { padding: 6px 2px; color: #999; } figcaption b { color: #eee; }
   img { width: 100%; height: auto; display: block; background: #000; border-radius: 6px; }
   .wrap { position: relative; }
-  .guide { position: absolute; left: 18%; top: 8%; width: 64%; height: 84%;
+  .guide { position: absolute; left: 33%; top: 10%; width: 34%; height: 80%;
            border: 2px dashed rgba(255,255,255,.55); border-radius: 8px; pointer-events: none; }
   .guide span { position: absolute; top: 6px; left: 8px; font-size: 13px; color: rgba(255,255,255,.75); }
 </style></head><body><div class="row">
   <figure><figcaption><b>Camera</b> &middot; C270 &middot; :8080 &middot; faces, and bottles held up in the box</figcaption>
-    <div class="wrap"><img id="b" alt="camera"><div class="guide"><span>hold the bottle here</span></div></div></figure>
+    <div class="wrap"><img id="b" alt="camera"><div class="guide"><span>hold the bottle close: fill this box</span></div></div></figure>
 </div><script>
   const h = location.hostname;
   document.getElementById("b").src = "http://" + h + ":8080/stream";
@@ -212,7 +212,7 @@ def make_handler(hub, bottles=None, coord=None):
                 if u.path == "/tab5/frame":
                     self._json(bottles.frame(body))
                 elif u.path == "/bottles/enroll" and q.get("name"):
-                    r = bottles.enroll(q["name"], body)
+                    r = bottles.enroll(q["name"], body, full=q.get("crop") == "full")
                     self._json(r, 400 if "error" in r else 200)
                 elif u.path == "/bottles/reset" and q.get("name"):
                     self._json(bottles.reset(q["name"]))
