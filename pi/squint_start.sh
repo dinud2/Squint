@@ -7,6 +7,16 @@
 H=/data/home/qnxuser
 for p in $(pidin -F "%a %N" | awk "\$2==\"camstream\" || \$2==\"python3\" {print \$1}"); do kill $p; done
 sleep 2
+# A camera that was unplugged and plugged back in does not come back by itself: QNX's
+# camera service drops its unit. If either unit is missing, restart the camera service.
+if [ ! -e /dev/sensor/camera5 ] || [ ! -e /dev/sensor/camera8 ]; then
+  echo "camera unit missing: restarting the camera service"
+  SP=$(sudo pidin arg | awk '$2=="sensor" && $3=="-U" {print $1}')
+  [ -n "$SP" ] && sudo kill $SP && sleep 2
+  sudo sh -c "nohup sensor -U 521:521 -b external -r /data/share/sensor -c /etc/config/sensor/sensor_rpi5.conf > /dev/null 2>&1 < /dev/null &"
+  waitfor /dev/sensor/camera5 10
+  waitfor /dev/sensor/camera8 10
+fi
 cd $H/stream
 (on -p 20 ./camstream 8 8080 80 1280 720 5 > camstream_bottles.log 2>&1 &)
 (on -p 20 ./camstream 5 8082 75 960 544 20 > camstream_faces.log 2>&1 &)
