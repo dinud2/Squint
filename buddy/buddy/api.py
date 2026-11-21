@@ -1,5 +1,7 @@
 """Tiny HTTP API for the speaker and the Tab5 (stdlib only, runs on QNX).
 
+    GET /history?days=30   -> [{"date", "doses": [Dose]}]          (routine tracking)
+    GET /insights?days=30  -> {"people": [PersonInsight]}           (docs/decline-tracking.md)
     GET /state    -> {"people": ["dinu", "kathy"], "unknown": 0, "since": t, "seq": n, "time": t}
                      Poll this (e.g. once a second from the ESP32).
     GET /events   -> Server-Sent Events: one `data: {json}` line per event, as it happens.
@@ -30,6 +32,8 @@ import threading
 import time
 from urllib.parse import parse_qs, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from .insights import insights
 
 
 class Hub:
@@ -121,6 +125,13 @@ def make_handler(hub, bottles=None, coord=None):
         def do_GET(self):
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            if coord is not None and u.path in ("/history", "/insights"):
+                days = max(1, min(int(q.get("days", 30)), 120))
+                if u.path == "/history":
+                    return self._json(coord.store.history(days))
+                if coord.journal is None:
+                    return self._json({"error": "routine tracking is off (no journal)"}, 503)
+                return self._json(insights(coord.store, coord.journal, days))
             if coord is not None and u.path in ("/people", "/medications", "/today", "/tab5/commands"):
                 st = coord.store
                 if u.path == "/people":
