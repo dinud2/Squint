@@ -5,13 +5,21 @@ import UIKit
 import AppKit
 #endif
 
+/// Squint's look: warm paper, black ink, and Squint's own signal colours
+/// (sage = taken, amber = check this, red = STOP). Everything else stays monochrome.
 enum Theme {
-    static let accent = Color(red: 0.20, green: 0.52, blue: 0.56)       // calm teal
-    static let taken = Color(red: 0.22, green: 0.6, blue: 0.36)
-    static let due = Color.secondary
-    static let missed = Color(red: 0.85, green: 0.45, blue: 0.1)
-    static let flagged = Color(red: 0.82, green: 0.2, blue: 0.2)
-    static let card = Color.gray.opacity(0.08)
+    static let paper   = Color(light: 0xF4EFE6, dark: 0x0F0E10)     // page
+    static let surface = Color(light: 0xFFFCF6, dark: 0x1B1A1D)     // cards
+    static let ink     = Color(light: 0x17161A, dark: 0xF4EFE6)     // text, buttons
+    static let line    = Color(light: 0x17161A, dark: 0xF4EFE6, opacity: 0.09)
+    static let muted   = Color(light: 0x6E6A66, dark: 0x9C978F)
+
+    static let taken   = Color(light: 0x3F8F5E, dark: 0x6CC08A)     // sage
+    static let missed  = Color(light: 0xD9861C, dark: 0xF0A030)     // Squint's amber
+    static let flagged = Color(light: 0xD93F45, dark: 0xF0585D)     // Squint's red
+    static let due     = muted
+    static let accent  = ink
+    static let card    = surface
 
     static func color(_ s: Dose.Status) -> Color {
         switch s {
@@ -29,6 +37,100 @@ enum Theme {
         case .missed: "exclamationmark.circle.fill"
         case .flagged: "hand.raised.circle.fill"
         }
+    }
+
+    /// Big rounded words, like on Squint's screen.
+    static func display(_ size: CGFloat, _ weight: Font.Weight = .heavy) -> Font {
+        .system(size: size, weight: weight, design: .rounded)
+    }
+}
+
+extension Color {
+    /// One colour for light mode and one for dark, from hex.
+    init(light: UInt32, dark: UInt32, opacity: Double = 1) {
+        func comps(_ h: UInt32) -> (Double, Double, Double) {
+            (Double((h >> 16) & 0xFF) / 255, Double((h >> 8) & 0xFF) / 255, Double(h & 0xFF) / 255)
+        }
+        let l = comps(light), d = comps(dark)
+        #if canImport(UIKit)
+        self.init(uiColor: UIColor { t in
+            let c = t.userInterfaceStyle == .dark ? d : l
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: opacity)
+        })
+        #else
+        self.init(nsColor: NSColor(name: nil) { a in
+            let c = a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? d : l
+            return NSColor(red: c.0, green: c.1, blue: c.2, alpha: opacity)
+        })
+        #endif
+    }
+}
+
+// MARK: - The capsule: one dose, drawn as a two-tone pill
+
+struct PillGlyph: View {
+    var status: Dose.Status
+    var width: CGFloat = 30
+    var upright = false
+
+    var body: some View {
+        let c = Theme.color(status)
+        let h = width * 0.42
+        ZStack {
+            switch status {
+            case .due:
+                Capsule().strokeBorder(Theme.ink.opacity(0.45), style: StrokeStyle(lineWidth: 1.6, dash: [3, 2.5]))
+            default:
+                Capsule().fill(c.opacity(0.22))
+                Capsule().fill(c).mask(alignment: .leading) { Rectangle().frame(width: width / 2) }
+                Capsule().strokeBorder(c, lineWidth: 1.4)
+            }
+        }
+        .frame(width: width, height: h)
+        .rotationEffect(upright ? .degrees(-90) : .degrees(-28))
+        .frame(width: upright ? h : width, height: upright ? width : width * 0.62)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The ink button: a black capsule with paper text.
+struct InkButtonStyle: ButtonStyle {
+    var prominent = true
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.display(17, .bold))
+            .foregroundStyle(prominent ? Theme.paper : Theme.ink)
+            .padding(.vertical, 15).padding(.horizontal, 22)
+            .frame(maxWidth: .infinity)
+            .background(prominent ? Theme.ink : Theme.line, in: Capsule())
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+    }
+}
+
+/// A small uppercase label above a group, like on a pharmacy label.
+struct Eyebrow: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text.uppercased())
+            .font(.system(size: 12, weight: .heavy, design: .rounded))
+            .kerning(1.4)
+            .foregroundStyle(Theme.muted)
+    }
+}
+
+extension View {
+    /// A card on the paper.
+    func paperCard(_ radius: CGFloat = 26) -> some View {
+        padding(18)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.line))
+    }
+
+    /// Forms and lists on paper instead of iOS grey.
+    func paperBackground() -> some View {
+        scrollContentBackground(.hidden).background(Theme.paper.ignoresSafeArea())
     }
 }
 
@@ -52,9 +154,9 @@ struct Avatar: View {
             } else {
                 Text(person.initials)
                     .font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.paper)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Theme.accent.gradient)
+                    .background(Theme.ink)
             }
         }
         .frame(width: size, height: size)
@@ -69,7 +171,7 @@ struct StatusLabel: View {
         Label(text, systemImage: Theme.icon(dose.status))
             .font(.subheadline.weight(.medium))
             .foregroundStyle(Theme.color(dose.status))
-            .labelStyle(.titleAndIcon)
+            .labelStyle(.titleOnly)
     }
 
     private var text: String {
@@ -96,7 +198,8 @@ struct TimeChips: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(Theme.accent.opacity(0.12), in: Capsule())
+                .background(Theme.surface, in: Capsule())
+                .overlay(Capsule().strokeBorder(Theme.line))
             }
         }
     }

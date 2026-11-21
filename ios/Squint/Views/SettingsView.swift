@@ -10,6 +10,18 @@ struct SettingsView: View {
         @Bindable var store = store
         NavigationStack {
             Form {
+                Section {
+                    HStack(spacing: 14) {
+                        SquintBadge(mood: store.useDemoData ? .idle : (store.liveConnected ? store.squint.mood : .sleep), size: 40)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Squint").font(Theme.display(20, .bold))
+                            Text(store.useDemoData ? "Showing demo data" : store.liveConnected ? "Connected to the station" : "Looking for the station…")
+                                .font(.subheadline).foregroundStyle(Theme.muted)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
                 Section("People") {
                     ForEach(store.elders) { p in
                         HStack(spacing: 12) { Avatar(person: p, size: 32); Text(p.name) }
@@ -38,7 +50,7 @@ struct SettingsView: View {
                         sending = true
                         Task { result = await store.announce(message); sending = false }
                     } label: {
-                        Label(sending ? "Sending…" : "Say it on the Google Home", systemImage: "speaker.wave.2.fill")
+                        Label(sending ? "Sending…" : "Say it in Squint's voice", systemImage: "speaker.wave.2.fill")
                     }
                     .disabled(sending || message.isEmpty)
                     if let r = result { Text(r).font(.footnote).foregroundStyle(.secondary) }
@@ -51,6 +63,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .paperBackground()
         }
     }
 }

@@ -91,7 +91,8 @@ struct AddMedicationView: View {
                     Text("A few photos from different sides help the avatar recognise this bottle.")
                 }
             }
-            .navigationTitle(isNew ? "Add medication" : med.name)
+            .paperBackground()
+            .navigationTitle(isNew ? "Add medicine" : med.name)
             .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
