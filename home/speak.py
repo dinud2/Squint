@@ -27,7 +27,7 @@ def main():
     path = voice.synth(" ".join(a.text), a.voice)
     secs = voice.duration(path)
     if a.local:
-        os.system(f"afplay '{path}'")
+        voice.play_local(path)
         return
     # serve the cache folder so the Nest can download the file, then tell it to play
     handler = functools.partial(SimpleHTTPRequestHandler, directory=voice.CACHE)

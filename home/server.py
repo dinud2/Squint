@@ -36,7 +36,7 @@ def announce(text, speaker=None, voice_name=None):
     seconds = round(voice.duration(path), 1)
     with State.lock:
         if State.local:
-            subprocess.run(["afplay", path])
+            voice.play_local(path)
             return {"ok": True, "speaker": "laptop", "seconds": seconds}
         url = f"http://{my_ip()}:{PORT}/audio/{os.path.basename(path)}"
         name = State.nests.play(url, TYPES[os.path.splitext(path)[1]], speaker)

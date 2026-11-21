@@ -93,3 +93,16 @@ def duration(path):
 
 def available():
     return sorted(f[:-5] for f in os.listdir(VOICES) if f.endswith(".onnx")) if os.path.isdir(VOICES) else []
+
+
+def play_local(path):
+    """Play an audio file on this computer: afplay on macOS, else ffplay / mpv / paplay (Linux)."""
+    import shutil
+    import subprocess
+    for cmd in (["afplay", path], ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", path],
+                ["mpv", "--no-video", "--really-quiet", path], ["paplay", path]):
+        if shutil.which(cmd[0]):
+            subprocess.run(cmd)
+            return True
+    print("no audio player found (afplay, ffplay, mpv or paplay)")
+    return False
