@@ -20,19 +20,24 @@ struct OnboardingView: View {
     }
 
     private var welcome: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            Image(systemName: "heart.text.square.fill")
-                .font(.system(size: 72)).foregroundStyle(Theme.accent)
-            Text("Set up Squint for your parents")
-                .font(.largeTitle.weight(.bold)).multilineTextAlignment(.center)
-            Text("About five minutes, once. After that, Squint guides them through every dose and only tells you when something needs you.")
-                .font(.title3).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Spacer()
-            Button { step = 1 } label: { Text("Get started").frame(maxWidth: .infinity) }
-                .buttonStyle(.borderedProminent).controlSize(.large)
+        VStack(alignment: .leading, spacing: 22) {
+            Spacer(minLength: 8)
+            SquintCard(state: SquintState(mood: .greet, title: "Hi! I'm Squint."))
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow("For the people who worry")
+                Text("I'll look after your parents' pills.")
+                    .font(Theme.display(32)).foregroundStyle(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Set me up once: who takes what, and when. After that I greet them at the counter, check every bottle, and only bother you when something's wrong.")
+                    .font(.body).foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button { step = 1 } label: { Label("Let's set up", systemImage: "arrow.right") }
+                .buttonStyle(InkButtonStyle())
         }
-        .padding(32)
+        .padding(24)
+        .background(Theme.paper.ignoresSafeArea())
     }
 }
 
@@ -78,6 +83,7 @@ struct PeopleStep: View {
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
+        .paperBackground()
         .navigationTitle("Your parents")
         .toolbar {
             Button("Next", action: next).disabled(store.elders.isEmpty)
@@ -106,7 +112,7 @@ struct ConnectStep: View {
                 Text("Squint station")
             } footer: {
                 Text(store.useDemoData ? "Try everything with Margaret and Robert's example data. Switch it off once the station is running."
-                                       : "Shown on the station's screen, e.g. http://192.168.1.10:8000")
+                                       : "Shown on the station's screen, e.g. http://172.20.10.9:8081")
             }
 
             Section {
@@ -128,6 +134,7 @@ struct ConnectStep: View {
                 Text("Squint uses your Google Home to call them over when it's time.")
             }
         }
+        .paperBackground()
         .navigationTitle("Connect")
         .toolbar { Button("Done") { Task { await store.refresh(); done() } } }
     }
