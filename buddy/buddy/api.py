@@ -72,6 +72,25 @@ class Hub:
                 self.subscribers.remove(q)
 
 
+CAMS_PAGE = """<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Squint cameras</title>
+<style>
+  body { margin: 0; background: #111; color: #eee; font: 15px system-ui, sans-serif; }
+  .row { display: flex; gap: 12px; padding: 12px; flex-wrap: wrap; }
+  figure { margin: 0; flex: 1 1 420px; min-width: 0; }
+  figcaption { padding: 6px 2px; color: #999; } figcaption b { color: #eee; }
+  img { width: 100%; height: auto; display: block; background: #000; border-radius: 6px; }
+</style></head><body><div class="row">
+  <figure><figcaption><b>Bottles</b> &middot; Brio 101 &middot; :8080</figcaption><img id="b" alt="bottle camera"></figure>
+  <figure><figcaption><b>Faces</b> &middot; C270 &middot; :8082</figcaption><img id="f" alt="face camera"></figure>
+</div><script>
+  const h = location.hostname;
+  document.getElementById("b").src = "http://" + h + ":8080/stream";
+  document.getElementById("f").src = "http://" + h + ":8082/stream";
+</script></body></html>"""
+
+
 def make_handler(hub, bottles=None, coord=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -109,6 +128,14 @@ def make_handler(hub, bottles=None, coord=None):
                     return self._json(st.today())
                 seq, lines = coord.tab5.after(int(q.get("after", 0)), float(q.get("wait", 0)))
                 return self._json({"seq": seq, "lines": lines})
+            if u.path == "/cams":                   # both camera streams side by side
+                body = CAMS_PAGE.encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if self.path.startswith("/state"):
                 with hub.lock:
                     s = dict(hub.state)
