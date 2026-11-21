@@ -3,6 +3,7 @@
     python tools/webcam_meds.py                 # first run builds the gallery from the enrol photos
     python tools/webcam_meds.py --rebuild       # rebuild it (e.g. after adding enrol photos)
     python tools/webcam_meds.py --cam 1
+    python tools/webcam_meds.py --pi 172.20.10.9   # the Pi's C270 (camstream on :8080)
 
 Same recogniser as the Pi ("show" mode, buddy/bottles.py): hold the bottle up inside the box,
 close enough to fill it. The gallery starts from vision/data/enroll/<name>/ (omega369 incl. its
@@ -33,6 +34,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 from buddy.bottle_service import CENTER, OTHER, ShowTracker, center_crop  # noqa: E402
 from buddy.bottles import Embedder, Gallery  # noqa: E402
+from buddy.camera import Camera  # noqa: E402
 
 ENROLL = os.path.join(os.path.dirname(HERE), "vision", "data", "enroll")
 GALLERY = os.path.join(HERE, "data", "bottles_webcam")
@@ -77,6 +79,7 @@ def build_gallery(emb, n_aug=4):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cam", default="0", help="webcam index or stream URL")
+    ap.add_argument("--pi", help="Pi host: read its camera stream http://<pi>:8080/stream")
     ap.add_argument("--rebuild", action="store_true")
     ap.add_argument("--fps", type=float, default=6, help="recognitions per second")
     a = ap.parse_args()
@@ -90,11 +93,15 @@ def main():
     meds = sorted(n for n in gal.items if n != OTHER)
     print("medicines:", ", ".join(meds))
 
-    cap = cv2.VideoCapture(int(a.cam) if a.cam.isdigit() else a.cam)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
-    if not cap.isOpened():
-        sys.exit(f"cannot open camera {a.cam}")
+    source = f"http://{a.pi}:8080/stream" if a.pi else a.cam
+    mirror = not source.startswith("http")     # mirror only a laptop webcam's preview
+    cam = Camera(source)
+    if cam.cap is not None:
+        cam.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
+        cam.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
+        if not cam.cap.isOpened():
+            sys.exit(f"cannot open camera {source}")
+    print("camera:", source)
 
     show, seen = ShowTracker(), {}
     today = datetime.date.today().isoformat()
@@ -107,13 +114,16 @@ def main():
     name, score, scores = "unknown", 0.0, {}
     cv2.namedWindow("meds", cv2.WINDOW_NORMAL)
     while True:
-        ok, frame = cap.read()
-        if not ok:
+        try:
+            _, frame = cam.read()
+        except TimeoutError as e:
+            print(e, flush=True)
+            continue
+        if frame is None:
             time.sleep(0.05)
             continue
-        frame = cv2.flip(frame, 1)                # mirror, so moving the bottle feels natural
         t = time.time()
-        crop, box = center_crop(frame)
+        crop, box = center_crop(frame)            # recognise the unmirrored image (labels read correctly)
 
         if enrolling and t - last_enrol >= 0.5:
             gal.add(enrolling, [emb(crop)], append=True)
@@ -131,7 +141,11 @@ def main():
                     f.write(json.dumps({"time": now, "bottle": ev["bottle"], "score": ev["score"]}) + "\n")
                 print(f"{now}  {ev['bottle']}  ({ev['score']:.2f})", flush=True)
 
-        # --- draw
+        # --- draw (on a mirrored copy for the laptop webcam, so moving the bottle feels natural)
+        if mirror:
+            frame = cv2.flip(frame, 1)
+            w = frame.shape[1]
+            box = [w - box[2], box[1], w - box[0], box[3]]
         known = name != "unknown"
         col = AMBER if enrolling else GREEN if known else GREY
         cv2.rectangle(frame, tuple(box[:2]), tuple(box[2:]), col, 3)
@@ -162,7 +176,7 @@ def main():
             target = OTHER if i == 0 else meds[i - 1] if i <= len(meds) else None
             enrolling = None if enrolling == target else target
             print("enrolling:", enrolling or "off", flush=True)
-    cap.release()
+    cam.close()
     cv2.destroyAllWindows()
 
 
