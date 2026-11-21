@@ -99,8 +99,11 @@ def play_local(path):
     """Play an audio file on this computer: afplay on macOS, else ffplay / mpv / paplay (Linux)."""
     import shutil
     import subprocess
-    for cmd in (["afplay", path], ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", path],
-                ["mpv", "--no-video", "--really-quiet", path], ["paplay", path]):
+    # paplay / pw-play first on Linux: ffplay ran without errors but played nothing when started
+    # from a background service (SDL picked no audio output).
+    for cmd in (["afplay", path], ["paplay", path], ["pw-play", path],
+                ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", path],
+                ["mpv", "--no-video", "--really-quiet", path]):
         if shutil.which(cmd[0]):
             subprocess.run(cmd)
             return True
