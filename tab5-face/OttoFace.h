@@ -4,16 +4,17 @@
 // anti-aliased shapes every frame instead of played from GIFs, so motion is fluid:
 // blinks, glances, bounces and heartbeats are computed per frame, and changing
 // expression is a quick blink (close the old eyes, open the new ones).
-// Minimal on purpose: only accents that carry meaning are kept (z, ?, sparkle).
+// Minimal on purpose: just the eyes and the words.
 //
+// Only the eyes: no frames, boxes or symbols around them.
 //   idle       round eyes that glance around and blink          white
 //   greet      ^^ smiling crescents, gentle bounce               white
-//   remind     one eye + a wink, sparkle                          white
+//   remind     one eye + a wink                                   white
 //   happy      hearts with a heartbeat                            white
-//   concerned  tall eye + half-closed eye, "?"                    amber
-//   stop       ring eyes, red frame around the face               red
+//   concerned  tall eye + half-closed eye                         amber
+//   stop       ring eyes                                          red
 //   wrong      lowered eyes glancing away                         amber
-//   sleep      closed eyes, slow breathing, z's                   dim blue
+//   sleep      closed eyes, slow breathing                        dim blue
 
 #pragma once
 
@@ -480,17 +481,11 @@ class OttoFace {
         const float o = blinkOpen(now) * (0.08f + 0.92f * grow);
         if (o > 0.995f) stamp(key(1, (uint32_t)r), (int)D + 16, lx, kEyeY, [&](float px, float py) { blob(px, py, D, D, c); });
         else blob(lx, kEyeY, D, D * o, c);
-        const float tw = 0.75f + 0.25f * sinf(t * 2 * kPi * 1.3f);
-        const float sx = rx + D * 0.62f, sy = kEyeY - D * 0.55f;
-        if (pop >= 1) {
+        if (pop >= 1)
           stamp(key(3), (int)D + 60, rx, kEyeY + D * 0.28f,
                 [&](float px, float py) { stroke(px, py, D * 0.42f, 215, 325, 26, c); });
-          const int q = std::min(7, (int)((tw - 0.5f) * 16));  // 8 sparkle sizes
-          stamp(key(4, q), 80, sx, sy, [&](float px, float py) { sparkle(px, py, 26 * (0.5f + q / 16.0f), c); });
-        } else {
+        else
           stroke(rx, kEyeY + D * 0.28f, D * 0.42f * pop, 215, 325, 26, c);
-          sparkle(sx, sy, 26 * tw * pop, c);
-        }
         break;
       }
       case Reaction::Happy: {  // hearts with a heartbeat
@@ -524,14 +519,10 @@ class OttoFace {
           blob(px, py, D, D, c);
           fillRectL(px - D, py - D, 2 * D, D * 0.5f + (D * 0.62f - h), kBackground);
         };
-        const float qx = rx + D * 0.6f, qy = kEyeY - D * 0.62f + 6 * sinf(t * 2 * kPi * 0.8f);
-        if (grow >= 1 && pop >= 1) {
+        if (grow >= 1)
           stamp(key(6), (int)D + 16, rx, ry, [&](float px, float py) { half(px, py, D * 0.62f); });
-          stamp(key(7), 120, qx, qy, [&](float px, float py) { question(px, py, 70, c); });
-        } else {
+        else
           half(rx, ry, D * 0.62f * grow);
-          question(qx, qy, 70 * pop, c);
-        }
         break;
       }
       case Reaction::Stop: {  // ring eyes
@@ -571,23 +562,14 @@ class OttoFace {
           else
             stroke(x, y - D * 0.32f, D * 0.42f * (0.9f + 0.1f * pop), 35, 145, 22, c);
         }
-        for (int i = 0; i < 2; ++i) {  // two z's drifting up and fading
-          const float ph = fmodf(t * 0.35f + i * 0.5f, 1.0f);
-          const int q = std::min(31, (int)(ph * 32));  // 32 steps of size + fade
-          const float qp = (q + 0.5f) / 32;
-          const float zx = rx + D * 0.45f + 40 * ph, zy = kEyeY - D * 0.35f - 110 * ph;
-          stamp(key(11, q), 80, zx, zy,
-                [&](float px, float py) { zee(px, py, 26 + 22 * qp, color565(scaled(base, sinf(qp * kPi)))); });
-        }
+
         break;
       }
     }
   }
 
   // Steady red frame round the face for STOP (drawn by update() when it changes).
-  void drawFrame(Reaction r, uint32_t) {
-    if (r == Reaction::Stop) frameW_ = 14;
-  }
+  void drawFrame(Reaction, uint32_t) {}  // no frame: STOP is shown by red eyes only
 
   void stats(uint32_t workUs) {
     ++frames_;

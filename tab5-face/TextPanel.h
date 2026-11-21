@@ -81,12 +81,7 @@ class TextPanel {
     const int blockH = lineCount * titleH + (s.detail[0] ? detailH : 0);
     int y = (kTextTop + kTextBottom) / 2 - blockH / 2 - kPanelTop;  // Canvas y.
 
-    const bool stop = s.reaction == Reaction::Stop;
-    if (stop) {
-      const int boxW = 980;  // centred, not the full landscape width
-      canvas_.fillSmoothRoundRect((kWidth - boxW) / 2, y - 20, boxW, blockH + 30, 40,
-                                  face::color565(face::kRed));
-    }
+    const bool stop = false;  // no red box: STOP is shown by the red eyes, the words stay plain
 
     canvas_.setTextDatum(textdatum_t::top_center);
     canvas_.setTextColor(kTextWhite);
