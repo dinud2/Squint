@@ -7,6 +7,13 @@ and when), then see the day at a glance:
 - only the things that need them
 - whether their routine is changing, week against their own usual (the **Trends** tab)
 
+And without opening the app at all:
+- **Siri / Spotlight / Shortcuts:** *"Has Dinu taken his pills in Squint?"* answers in a sentence
+  (taken, what's next, anything missed) with a small card. *"How is everyone doing in Squint?"* does
+  everyone at once. Spotlight lists one shortcut per person.
+- **Widget:** home screen (small, medium) and lock screen (round gauge, a line per person, inline).
+  Squint's face in the current mood, pills per person, and the one thing that needs you.
+
 SwiftUI, iOS 17+, no dependencies.
 
 ## Build and run
@@ -21,6 +28,9 @@ SwiftUI, iOS 17+, no dependencies.
      This needs internet.
   5. Free installs expire after 7 days; reinstall when that happens. **Don't commit your
      `DEVELOPMENT_TEAM`.** It would make everyone else sign with your account.
+  6. Set the team on the **SquintWidget** target too. Both targets share the App Group
+     `group.com.hackwestern.squint`; if your team can't create it, the app still works, but the
+     widget and Siri can't see the app's settings and fall back to demo data.
 
 ## Demo mode and live mode
 
@@ -37,21 +47,38 @@ To try live mode without the Pi, run the backend on the Mac with no camera (in `
 `python3 -m buddy.service --bottle-source ""`), and set the station to `http://localhost:8081` in the simulator. If an older
 station has no `/insights`, Today still works and Trends says it couldn't load.
 
+## Siri and the widget
+
+Both are built on `Glance` (`Shared/Glance.swift`): today boiled down to, per person, taken/total,
+what's due now, what's next and what went wrong, plus one mood. Siri says it in words, the widget
+draws it, so they always agree.
+
+- The widget asks the station itself (it runs without the app), every 15 minutes or right when the
+  next dose is due. When the app sees something change, it tells the widget to redraw at once.
+- Settings live in the App Group, not plain `UserDefaults`, so the widget and Siri read the same
+  demo/live switch and station address as the app.
+- Siri learns the people's names from `PersonQuery`; the app refreshes them when someone is added.
+
 ## Files
 
 ```
+Shared/                  used by the app and the widget
+  Models.swift, API.swift, Insights.swift
+  Settings.swift         settings in the App Group (demo/live, station, speaker)
+  Glance.swift           today in one look, and how Siri says it
+  Theme.swift            Squint's colours and fonts
+SquintWidget/
+  SquintWidget.swift     the widget: timeline, every size, Squint's eyes drawn in shapes
+tools/make-icon.swift    draws the app icon (swift tools/make-icon.swift, from ios/)
 Squint/
   SquintApp.swift        app entry, the floating tab bar, starts live following
   AppStore.swift         all state (@Observable): data, settings, Squint's state, demo playback
-  API.swift              SquintAPI protocol, MockAPI (demo), LiveAPI (station), HomeSpeaker (voice)
-  Models.swift           Person, Medication, Dose, ClockTime: same JSON as docs/api-contract.md
-  Insights.swift         routine tracking from /insights (signals, daily points), and the demo's
-                         seeded 30 days
+  Intents.swift          Siri and Shortcuts: check one person, or everyone; the answer card
   LabelParser.swift      reads a pharmacy label photo (Vision OCR) into a medication
   Views/
     SquintFace.swift     Squint's 8 moods drawn live, plus the card and badge, and a parser for
                          Tab5 command lines
-    Components.swift     the design system: paper/ink colours, the pill glyph, buttons, cards
+    Components.swift     the design system: the pill glyph, buttons, cards (colours in Shared/Theme)
     TodayView.swift      greeting, live Squint, day strip, alerts, a routine nudge, per-person doses
     TrendsView.swift     each person's steadiness ring, how-late chart against usual, and signals
     MedicationsView.swift, AddMedicationView.swift   list and add/edit (scan a label)
