@@ -27,7 +27,10 @@ TOP_K = 5               # score = mean of the 5 best matches against that person
 
 
 class FaceID:
-    def __init__(self, gallery_dir=GALLERY_DIR):
+    def __init__(self, gallery_dir=GALLERY_DIR, det_scale=1.0):
+        """det_scale < 1 finds faces on a shrunken frame (0.5 -> ~4x less work on the Pi);
+        boxes and landmarks are scaled back, so alignment still uses the full-res frame."""
+        self.det_scale = det_scale
         self.det = cv2.FaceDetectorYN.create(DET_MODEL, "", (320, 320), DET_SCORE, 0.3, 5000)
         self.rec = cv2.FaceRecognizerSF.create(REC_MODEL, "")
         self.gallery_dir = gallery_dir
@@ -35,25 +38,26 @@ class FaceID:
         self.reload()
 
     # ------------------------------------------------------------ detection / embedding
+    def _detect(self, frame):
+        s = self.det_scale
+        img = frame if s == 1.0 else cv2.resize(frame, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+        h, w = img.shape[:2]
+        self.det.setInputSize((w, h))
+        _, faces = self.det.detect(img)
+        if faces is None:
+            return []
+        faces = faces.copy()
+        faces[:, :14] /= s                               # boxes + landmarks back to full-res pixels
+        return [f for f in faces if min(f[2], f[3]) >= MIN_FACE_PX]
+
     def main_face(self, frame):
         """-> the YuNet row (x, y, w, h, 5 landmarks, score) of the largest big-enough face, or None."""
-        h, w = frame.shape[:2]
-        self.det.setInputSize((w, h))
-        _, faces = self.det.detect(frame)
-        if faces is None:
-            return None
-        faces = [f for f in faces if min(f[2], f[3]) >= MIN_FACE_PX]
+        faces = self._detect(frame)
         return max(faces, key=lambda f: f[2] * f[3]) if faces else None
 
     def all_faces(self, frame, max_faces=4):
         """-> YuNet rows of every big-enough face, largest first (closest to the counter)."""
-        h, w = frame.shape[:2]
-        self.det.setInputSize((w, h))
-        _, faces = self.det.detect(frame)
-        if faces is None:
-            return []
-        faces = [f for f in faces if min(f[2], f[3]) >= MIN_FACE_PX]
-        return sorted(faces, key=lambda f: -f[2] * f[3])[:max_faces]
+        return sorted(self._detect(frame), key=lambda f: -f[2] * f[3])[:max_faces]
 
     def identify_all(self, frame):
         """Name every face at the counter. -> list of (face_row, name, score, scores), largest first.
