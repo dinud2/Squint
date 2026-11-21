@@ -144,4 +144,4 @@ reasons behind each signal are in [decline-tracking.md](decline-tracking.md).
   That's why a low-confidence reading asks the person instead of deciding.
 - **The C270 on QNX** gives 960×544 at 20 fps uncompressed (USB 2), which is enough for faces and
   bottles but not much more.
-- Debugging a quiet Squint: `buddy/tools/doctor.py` and `GET /health` (see [buddy/README.md](../buddy/README.md)).
+- Debugging a quiet Squint: [camera-models.md](camera-models.md), `buddy/tools/doctor.py` and `GET /health`.
