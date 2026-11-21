@@ -35,23 +35,17 @@ process can hold the camera.
   back from the device. The frame rate must be lowered before the size is raised,
   otherwise the size is rejected.
 
-## Running it for Squint
+## Running it
 
-- **Run it at a fixed, high priority** so the camera can't be starved by other work (the STOP path
-  starts here). Part B sets the final priorities; for now:
+- **Run it at a fixed, high priority** so the camera can't be starved by recognition work:
   `on -p 20 ./camstream 5 8080 > camstream.log 2>&1 &`
-- **Port 8080 belongs to the camera.** The station API (Part A) uses a different port.
-- **Vision reads this stream**: `python3 vision_main.py --source http://localhost:8080/stream`
-  on the Pi, or `--source http://<pi-ip>:8080/stream` from a laptop.
-- **If the camera stalls, the stream simply goes quiet.** That is intended: vision gives up
-  after 5 s, its `alive` heartbeat stops and the alarm turns amber. Never resend an old frame.
+- **Port 8080 belongs to the camera.** Recognition reads `http://localhost:8080/stream` on the
+  Pi, or `http://<pi-ip>:8080/stream` from a laptop.
+- **If the camera stalls, the stream goes quiet.** Consumers should treat no frames for a few
+  seconds as "camera down", never reuse an old frame.
 
-## Framing
+## Framing (counter-top device)
 
-Written for the standard Camera Module 3 (~66°). The C270 is narrower (~55° diagonal) and
-960×544 is wide-screen, so stand a little further back than the numbers below.
-
-Squint needs Margaret's **face and hands** in view. With the standard lens that means about
-**0.9–1.4 m** from the camera, lens roughly at chest-to-chin height, tilted slightly up.
-Check with `python tools/camera_check.py --source http://<pi-ip>:8080/stream --show` (in `vision/`):
-nose ≥ 80%, and a wrist visible when you raise a hand to your mouth.
+The device sits on a counter with the camera tilted up at people standing in front of it.
+The C270 is fairly narrow (~55° diagonal), so people need to be roughly 0.6–1.2 m away for the
+face and the hand holding a bottle to both be in view.
