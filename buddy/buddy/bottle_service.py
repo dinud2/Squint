@@ -82,7 +82,7 @@ def pick_enrol_box(boxes):
 class BottleService:
     def __init__(self, hub=None, mode="show"):
         self.mode = mode
-        self.emb, self.gallery = Embedder(), Gallery()
+        self.emb, self.gallery = Embedder(), Gallery(center=(mode == "show"))
         self.det = None
         if mode == "counter":
             from .detector import NanoDet
@@ -174,6 +174,7 @@ class BottleService:
     def reset(self, name):
         with self.lock:
             self.gallery.items.pop(name, None)
+            self.gallery._recenter()
             p = os.path.join(GALLERY_DIR, name + ".npy")
             if os.path.exists(p):
                 os.remove(p)

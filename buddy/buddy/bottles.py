@@ -47,10 +47,36 @@ def crop(frame, box, pad=0.10):
 
 
 class Gallery:
-    def __init__(self, directory=GALLERY_DIR):
+    """center=True ("show" mode): compare what is left after removing the scene every photo
+    shares. A bottle held up fills only part of the crop; the rest (the person, the lanyard,
+    the ceiling) is the same in every photo, so raw embeddings were ~0.85 alike for every
+    bottle and the right one led by only 0.02-0.05. Subtracting the mean embedding of all
+    enrolled photos (incl. _other) and renormalising left the bottle: leads of +0.28..+0.51
+    on the enrolment photos (leave-one-out, 100% top-1). The scores change scale, hence the
+    separate thresholds."""
+    CENTER_ACCEPT = 0.50
+    CENTER_MARGIN = 0.15
+
+    def __init__(self, directory=GALLERY_DIR, center=False):
         self.dir = directory
+        self.center = center
         self.items = {}
+        self.mu = None
+        self.cen = {}
+        self.accept = self.CENTER_ACCEPT if center else ACCEPT
+        self.margin = self.CENTER_MARGIN if center else MARGIN
         self.reload()
+
+    def _recenter(self):
+        if not self.center or not self.items:
+            self.mu, self.cen = None, {}
+            return
+        self.mu = np.concatenate(list(self.items.values())).mean(0)
+        self.cen = {n: self._c(g) for n, g in self.items.items()}
+
+    def _c(self, v):
+        v = np.atleast_2d(v) - self.mu
+        return v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-8)
 
     def reload(self):
         self.items = {}
@@ -58,17 +84,22 @@ class Gallery:
             for fn in sorted(os.listdir(self.dir)):
                 if fn.endswith(".npy"):
                     self.items[fn[:-4]] = np.load(os.path.join(self.dir, fn))
+        self._recenter()
 
     def add(self, name, embeddings, save=True, append=False):
         e = np.asarray(embeddings, np.float32)
         if append and name in self.items:
             e = np.concatenate([self.items[name], e])
         self.items[name] = e
+        self._recenter()
         if save:
             os.makedirs(self.dir, exist_ok=True)
             np.save(os.path.join(self.dir, name + ".npy"), e)
 
     def scores(self, emb):
+        if self.center and self.mu is not None:
+            q = self._c(emb)[0]
+            return {n: float(np.sort(g @ q)[::-1][:TOP_K].mean()) for n, g in self.cen.items()}
         return {n: float(np.sort(g @ emb)[::-1][:TOP_K].mean()) for n, g in self.items.items()}
 
     def identify(self, emb):
@@ -79,6 +110,6 @@ class Gallery:
         ranked = sorted(sc.items(), key=lambda kv: -kv[1])
         best, bs = ranked[0]
         second = ranked[1][1] if len(ranked) > 1 else -1.0
-        if bs < ACCEPT or bs - second < MARGIN:
+        if bs < self.accept or bs - second < self.margin:
             return "unknown", bs, sc
         return best, bs, sc
