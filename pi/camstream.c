@@ -1,5 +1,5 @@
 // camstream: QNX (Raspberry Pi 5) camera -> MJPEG over HTTP.
-//   build: gcc -O2 -o camstream camstream.c -lcamapi -lturbojpeg -lsocket
+//   build: gcc -O2 -Wall -o camstream camstream.c -lcamapi -l:libturbojpeg.so.0 -lsocket
 //   run:   ./camstream [unit=5] [port=8080] [quality=75]
 //   view:  http://<pi-ip>:8080/          (page)
 //          http://<pi-ip>:8080/stream    (raw MJPEG, works in OpenCV/ffplay)
