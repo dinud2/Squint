@@ -8,3 +8,5 @@ vision/data/
 # ...except the two the station runs (the Pi can't run torch to regenerate them)
 !vision/models/movenet_lightning.onnx
 !vision/models/bottle_embed.onnx
+# personal data: face photos, embeddings, bottle photos. Never commit.
+buddy/data/
