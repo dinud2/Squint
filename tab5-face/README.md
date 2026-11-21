@@ -117,7 +117,13 @@ demo
 
 `next` steps through the reactions, for testing. `demo` starts asleep, wakes for the 8:00 dose, then shows each reaction.
 
-The Pi can send these lines over USB serial. To use Wi-Fi, call `handleCommand()` from an HTTP or WebSocket handler.
+The Pi sends these lines over Wi-Fi (`PiLink.h`, see [docs/tab5-pi.md](../docs/tab5-pi.md)), or over USB serial.
+
+**When it can't reach the Pi, it says so.** Instead of sleeping forever, the face turns concerned:
+- **"No Wi-Fi"** after 15 s without the hotspot.
+- **"Can't reach Squint"** after 3 failed requests to the Pi. The detail line shows the address it's trying. If that's an old hotspot address, fix `SQUINT_PI_HOST` in `secrets.h` and reflash.
+
+It goes back to sleep as soon as the Pi answers. These two lines (`offline …`, `online`) come from the Tab5 itself, not the Pi.
 
 ## Desktop preview (no Tab5 needed)
 

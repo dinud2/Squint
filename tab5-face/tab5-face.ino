@@ -195,6 +195,21 @@ void handleCommand(char* line) {
     react((Reaction)(((int)reactions::get().reaction + 1) % 8));
     return;
   }
+  // From PiLink itself: no Wi-Fi or no Pi. Say so on screen (held, no sound) instead of
+  // sleeping forever, and go back to sleep when the Pi answers again.
+  static bool linkDown = false;
+  if (strcmp(line, "offline") == 0) {
+    char* detail = args ? strchr(args, '|') : nullptr;
+    if (detail) *detail++ = '\0';
+    reactions::set(Reaction::Concerned, args ? args : "", detail ? detail : "", 0);
+    linkDown = true;
+    return;
+  }
+  if (strcmp(line, "online") == 0) {
+    if (linkDown) reactions::set(Reaction::Sleep);
+    linkDown = false;
+    return;
+  }
   demoIndex = -1;  // A real event stops the demo.
   if (strcmp(line, "presence") == 0 || strcmp(line, "wake") == 0) {
     onPresence(args);
