@@ -68,10 +68,15 @@ def main():
     ap.add_argument("--pi", default="172.20.10.9")
     a = ap.parse_args()
     pi = Pi(a.pi)
-    try:
-        targets = [m["id"] for m in pi.get("/medications")] + ["_other"]
-    except Exception as e:
-        sys.exit(f"cannot reach the Pi at {pi.api}: {e}")
+    for attempt in range(30):  # the laptop may still be rejoining the hotspot
+        try:
+            targets = [m["id"] for m in pi.get("/medications")] + ["_other"]
+            break
+        except Exception as e:
+            print(f"cannot reach the Pi at {pi.api} ({e}); retrying...", flush=True)
+            time.sleep(2)
+    else:
+        sys.exit(f"cannot reach the Pi at {pi.api}: is this laptop on the same Wi-Fi as the Pi?")
     cam = Camera(f"http://{a.pi}:8080/stream")
     sel, enrolling, last_shot, reset_armed = 0, False, 0.0, 0.0
     status = ""
@@ -82,7 +87,14 @@ def main():
         status = r.get("error") or f"{name}: {r.get('photos')} photos"
 
     while True:
-        _, frame = cam.read()
+        try:
+            _, frame = cam.read()
+        except TimeoutError:
+            # stream dropped (Wi-Fi switch, Pi restart): keep the window open and retry
+            status = "no camera frames: is the laptop on the hotspot? retrying..."
+            if (cv2.waitKey(500) & 0xFF) == ord("q"):
+                break
+            continue
         h, w = frame.shape[:2]
         last = pi.last or {}
         name, score = last.get("name", "unknown"), last.get("score", 0.0)
