@@ -28,25 +28,21 @@ final class AppStore {
     private var commandSeq = 0
 
     init() {
-        let d = UserDefaults.standard
-        useDemoData = d.object(forKey: "useDemoData") as? Bool ?? true
-        backendURL = d.string(forKey: "backendURL") ?? "http://172.20.10.9:8081"
-        homeURL = d.string(forKey: "homeURL") ?? "http://192.168.1.10:8765"
-        onboarded = d.bool(forKey: "onboarded")
+        useDemoData = SquintSettings.useDemoData
+        backendURL = SquintSettings.backendURL
+        homeURL = SquintSettings.homeURL
+        onboarded = SquintSettings.onboarded
     }
 
+    /// Settings live in the App Group (Shared/Settings.swift), so the widget and Siri see them too.
     private func save() {
-        let d = UserDefaults.standard
-        d.set(useDemoData, forKey: "useDemoData")
-        d.set(backendURL, forKey: "backendURL")
-        d.set(homeURL, forKey: "homeURL")
-        d.set(onboarded, forKey: "onboarded")
+        SquintSettings.useDemoData = useDemoData
+        SquintSettings.backendURL = backendURL
+        SquintSettings.homeURL = homeURL
+        SquintSettings.onboarded = onboarded
     }
 
-    var api: SquintAPI {
-        if !useDemoData, let url = URL(string: backendURL) { return LiveAPI(base: url) }
-        return MockAPI.shared
-    }
+    var api: SquintAPI { SquintSettings.api }
 
     var elders: [Person] { people.filter { $0.role == .elder } }
     func person(_ id: String) -> Person? { people.first { $0.id == id } }

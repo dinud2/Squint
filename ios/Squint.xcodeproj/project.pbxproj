@@ -9,10 +9,20 @@
 /* Begin PBXFileReference section */
 		5A0000000000000000000001 /* Squint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Squint.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A000000000000000000000E /* Squint-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Squint-Info.plist"; sourceTree = "<group>"; };
+		5A0000000000000000000012 /* Squint.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Squint.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		5A0000000000000000000002 /* Squint */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Squint; sourceTree = "<group>"; };
+		5A0000000000000000000002 /* Squint */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Squint;
+			sourceTree = "<group>";
+		};
+		5A0000000000000000000011 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -30,7 +40,9 @@
 			isa = PBXGroup;
 			children = (
 				5A0000000000000000000002 /* Squint */,
+				5A0000000000000000000011 /* Shared */,
 				5A000000000000000000000E /* Squint-Info.plist */,
+				5A0000000000000000000012 /* Squint.entitlements */,
 				5A0000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -60,6 +72,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				5A0000000000000000000002 /* Squint */,
+				5A0000000000000000000011 /* Shared */,
 			);
 			name = Squint;
 			packageProductDependencies = (
@@ -164,6 +177,7 @@
 		5A000000000000000000000F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Squint.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
@@ -190,6 +204,7 @@
 		5A0000000000000000000010 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Squint.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
