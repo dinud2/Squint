@@ -1,0 +1,4 @@
+camstream
+probe
+*.o
+*.log
