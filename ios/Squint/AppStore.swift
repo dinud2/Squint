@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import WidgetKit
 
 /// The app's state in one place. Views read from it; it talks to the API.
 @MainActor
@@ -26,27 +27,25 @@ final class AppStore {
     var liveConnected = false
     var demoScene: SquintState?                       // while "Play a demo" runs
     private var commandSeq = 0
+    private var lastGlance: Glance?
 
     init() {
-        let d = UserDefaults.standard
-        useDemoData = d.object(forKey: "useDemoData") as? Bool ?? true
-        backendURL = d.string(forKey: "backendURL") ?? "http://172.20.10.9:8081"
-        homeURL = d.string(forKey: "homeURL") ?? "http://192.168.1.10:8765"
-        onboarded = d.bool(forKey: "onboarded")
+        useDemoData = SquintSettings.useDemoData
+        backendURL = SquintSettings.backendURL
+        homeURL = SquintSettings.homeURL
+        onboarded = SquintSettings.onboarded
     }
 
+    /// Settings live in the App Group (Shared/Settings.swift), so the widget and Siri see them too.
     private func save() {
-        let d = UserDefaults.standard
-        d.set(useDemoData, forKey: "useDemoData")
-        d.set(backendURL, forKey: "backendURL")
-        d.set(homeURL, forKey: "homeURL")
-        d.set(onboarded, forKey: "onboarded")
+        SquintSettings.useDemoData = useDemoData
+        SquintSettings.backendURL = backendURL
+        SquintSettings.homeURL = homeURL
+        SquintSettings.onboarded = onboarded
+        WidgetCenter.shared.reloadAllTimelines()          // demo/live or the station may have changed
     }
 
-    var api: SquintAPI {
-        if !useDemoData, let url = URL(string: backendURL) { return LiveAPI(base: url) }
-        return MockAPI.shared
-    }
+    var api: SquintAPI { SquintSettings.api }
 
     var elders: [Person] { people.filter { $0.role == .elder } }
     func person(_ id: String) -> Person? { people.first { $0.id == id } }
@@ -61,11 +60,19 @@ final class AppStore {
             async let t = api.today()
             var ppl = try await p
             for i in ppl.indices { ppl[i].photo = photos[ppl[i].id] }
+            if ppl.map(\.name) != people.map(\.name) {
+                SquintShortcuts.updateAppShortcutParameters()   // so Siri knows the names
+            }
             people = ppl
             medications = try await m
             doses = try await t
             lastError = nil
             lastRefresh = Date()
+            let g = Glance.make(people: people, medications: medications, doses: doses)
+            if g.people != lastGlance?.people || g.mood != lastGlance?.mood {
+                lastGlance = g
+                WidgetCenter.shared.reloadAllTimelines()      // something changed: redraw the widget now
+            }
         } catch {
             lastError = error.localizedDescription
         }

@@ -6,17 +6,70 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		5A0000000000000000000024 /* SquintWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000020 /* SquintWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5A0000000000000000000026 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5A000000000000000000000A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A0000000000000000000027;
+			remoteInfo = SquintWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5A0000000000000000000025 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5A0000000000000000000024 /* SquintWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		5A0000000000000000000001 /* Squint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Squint.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A000000000000000000000E /* Squint-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Squint-Info.plist"; sourceTree = "<group>"; };
+		5A0000000000000000000012 /* Squint.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Squint.entitlements; sourceTree = "<group>"; };
+		5A0000000000000000000020 /* SquintWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SquintWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5A0000000000000000000021 /* SquintWidget-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "SquintWidget-Info.plist"; sourceTree = "<group>"; };
+		5A0000000000000000000022 /* SquintWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SquintWidget.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		5A0000000000000000000002 /* Squint */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Squint; sourceTree = "<group>"; };
+		5A0000000000000000000002 /* Squint */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Squint;
+			sourceTree = "<group>";
+		};
+		5A0000000000000000000011 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		5A0000000000000000000023 /* SquintWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SquintWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		5A0000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A000000000000000000002A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -30,7 +83,12 @@
 			isa = PBXGroup;
 			children = (
 				5A0000000000000000000002 /* Squint */,
+				5A0000000000000000000011 /* Shared */,
+				5A0000000000000000000023 /* SquintWidget */,
 				5A000000000000000000000E /* Squint-Info.plist */,
+				5A0000000000000000000012 /* Squint.entitlements */,
+				5A0000000000000000000021 /* SquintWidget-Info.plist */,
+				5A0000000000000000000022 /* SquintWidget.entitlements */,
 				5A0000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -39,6 +97,7 @@
 			isa = PBXGroup;
 			children = (
 				5A0000000000000000000001 /* Squint.app */,
+				5A0000000000000000000020 /* SquintWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -53,13 +112,16 @@
 				5A0000000000000000000008 /* Sources */,
 				5A0000000000000000000003 /* Frameworks */,
 				5A0000000000000000000009 /* Resources */,
+				5A0000000000000000000025 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				5A0000000000000000000028 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				5A0000000000000000000002 /* Squint */,
+				5A0000000000000000000011 /* Shared */,
 			);
 			name = Squint;
 			packageProductDependencies = (
@@ -67,6 +129,29 @@
 			productName = Squint;
 			productReference = 5A0000000000000000000001 /* Squint.app */;
 			productType = "com.apple.product-type.application";
+		};
+		5A0000000000000000000027 /* SquintWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A000000000000000000002C /* Build configuration list for PBXNativeTarget "SquintWidget" */;
+			buildPhases = (
+				5A0000000000000000000029 /* Sources */,
+				5A000000000000000000002A /* Frameworks */,
+				5A000000000000000000002B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5A0000000000000000000023 /* SquintWidget */,
+				5A0000000000000000000011 /* Shared */,
+			);
+			name = SquintWidget;
+			packageProductDependencies = (
+			);
+			productName = SquintWidget;
+			productReference = 5A0000000000000000000020 /* SquintWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -79,6 +164,9 @@
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					5A0000000000000000000006 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					5A0000000000000000000027 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -98,12 +186,20 @@
 			projectRoot = "";
 			targets = (
 				5A0000000000000000000006 /* Squint */,
+				5A0000000000000000000027 /* SquintWidget */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		5A0000000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A000000000000000000002B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -120,7 +216,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5A0000000000000000000029 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5A0000000000000000000028 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5A0000000000000000000027 /* SquintWidget */;
+			targetProxy = 5A0000000000000000000026 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		5A000000000000000000000C /* Debug */ = {
@@ -164,6 +275,8 @@
 		5A000000000000000000000F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Squint.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
@@ -190,6 +303,8 @@
 		5A0000000000000000000010 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Squint.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
@@ -213,6 +328,52 @@
 			};
 			name = Release;
 		};
+		5A000000000000000000002D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SquintWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "SquintWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Squint;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hackwestern.squint.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		5A000000000000000000002E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SquintWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "SquintWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Squint;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hackwestern.squint.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -230,6 +391,15 @@
 			buildConfigurations = (
 				5A000000000000000000000C /* Debug */,
 				5A000000000000000000000D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5A000000000000000000002C /* Build configuration list for PBXNativeTarget "SquintWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A000000000000000000002D /* Debug */,
+				5A000000000000000000002E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
