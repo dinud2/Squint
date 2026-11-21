@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import WidgetKit
 
 /// The app's state in one place. Views read from it; it talks to the API.
 @MainActor
@@ -26,6 +27,7 @@ final class AppStore {
     var liveConnected = false
     var demoScene: SquintState?                       // while "Play a demo" runs
     private var commandSeq = 0
+    private var lastGlance: Glance?
 
     init() {
         useDemoData = SquintSettings.useDemoData
@@ -40,6 +42,7 @@ final class AppStore {
         SquintSettings.backendURL = backendURL
         SquintSettings.homeURL = homeURL
         SquintSettings.onboarded = onboarded
+        WidgetCenter.shared.reloadAllTimelines()          // demo/live or the station may have changed
     }
 
     var api: SquintAPI { SquintSettings.api }
@@ -65,6 +68,11 @@ final class AppStore {
             doses = try await t
             lastError = nil
             lastRefresh = Date()
+            let g = Glance.make(people: people, medications: medications, doses: doses)
+            if g.people != lastGlance?.people || g.mood != lastGlance?.mood {
+                lastGlance = g
+                WidgetCenter.shared.reloadAllTimelines()      // something changed: redraw the widget now
+            }
         } catch {
             lastError = error.localizedDescription
         }
