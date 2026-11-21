@@ -30,7 +30,10 @@ from .bottle_tracker import BottleTracker
 from .bottles import GALLERY_DIR, Embedder, Gallery, crop
 
 OTHER = "_other"          # the "not a medicine" class: never reported as a bottle
-CENTER = (0.18, 0.08, 0.82, 0.92)   # the part of the frame a held-up bottle fills (x0, y0, x1, y1)
+# The box the bottle is held in, close to the camera (~20-30 cm) so it FILLS the box. The first
+# version used a big box (64% x 84%) with the bottle held small inside it: the photos were mostly
+# the person and the room, and every empty view looked like the bottles with the least label.
+CENTER = (0.33, 0.10, 0.67, 0.90)   # (x0, y0, x1, y1) as fractions of the frame
 
 
 def center_crop(img, box=CENTER):
@@ -131,8 +134,15 @@ class BottleService:
         return {"bottles": out, "on_counter": on_counter, "events": events,
                 "ms": round((time.time() - t0) * 1000)}
 
-    def enroll(self, name, jpg, augment=6):
-        """jpg = a photo, or empty: use the newest frame from the bottle camera."""
+    def enroll(self, name, jpg, augment=6, full=False):
+        """jpg = a photo, or empty: use the newest frame from the bottle camera.
+        full=True: jpg is a close-up (e.g. a phone photo with the bottle filling it): use the whole
+        picture, and make 12 webcam-like versions of it (smaller, blurred, compressed, other light)."""
+        if full:
+            img = cv2.imdecode(np.frombuffer(jpg or b"", np.uint8), cv2.IMREAD_COLOR)
+            if img is None:
+                return {"error": "crop=full needs a JPEG body"}
+            return self._enroll_closeup(name, img)
         if jpg:
             img = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
         else:
@@ -170,6 +180,41 @@ class BottleService:
             cv2.imwrite(os.path.join(d, f"{int(time.time() * 1000)}.jpg"), crops[0])
             n = len(self.gallery.items[name])
         return {"name": name, "photos": n // augment, "embeddings": n, "box": box}
+
+    def _enroll_closeup(self, name, img, n=12):
+        """A sharp close-up -> n versions that look like the C270's box: about the box's size,
+        a little off-centre / rotated, blurred, darker or brighter, JPEG-compressed."""
+        rng = np.random.default_rng()
+        h, w = img.shape[:2]
+        bw, bh = int((CENTER[2] - CENTER[0]) * 960), int((CENTER[3] - CENTER[1]) * 544)  # the box in a C270 frame
+        embs = []
+        for i in range(n):
+            s = 1.0 if i == 0 else rng.uniform(0.8, 1.0)
+            cw, ch = int(w * s), int(h * s)
+            x0 = int(rng.uniform(0, w - cw)) if i else (w - cw) // 2
+            y0 = int(rng.uniform(0, h - ch)) if i else (h - ch) // 2
+            v = img[y0:y0 + ch, x0:x0 + cw]
+            if i:
+                M = cv2.getRotationMatrix2D((cw / 2, ch / 2), rng.uniform(-12, 12), 1.0)
+                v = cv2.warpAffine(v, M, (cw, ch), borderMode=cv2.BORDER_REFLECT)
+            # down to the box's pixel size (keeping the aspect of the box), like the webcam sees it
+            v = cv2.resize(v, (bw, bh), interpolation=cv2.INTER_AREA)
+            if i:
+                k = int(rng.choice([1, 3, 3, 5]))
+                if k > 1:
+                    v = cv2.GaussianBlur(v, (k, k), 0)
+                v = cv2.convertScaleAbs(v, alpha=rng.uniform(0.7, 1.2), beta=rng.uniform(-30, 25))
+                q = int(rng.uniform(35, 80))
+                v = cv2.imdecode(cv2.imencode(".jpg", v, [cv2.IMWRITE_JPEG_QUALITY, q])[1], cv2.IMREAD_COLOR)
+            embs.append(self.emb(v))
+        with self.lock:
+            self.gallery.add(name, embs, append=True)
+            d = os.path.join(GALLERY_DIR, name)
+            os.makedirs(d, exist_ok=True)
+            cv2.imwrite(os.path.join(d, f"closeup_{int(time.time() * 1000)}.jpg"),
+                        cv2.resize(img, (bw, bh), interpolation=cv2.INTER_AREA))
+            total = len(self.gallery.items[name])
+        return {"name": name, "closeup_versions": n, "embeddings": total}
 
     def reset(self, name):
         with self.lock:
