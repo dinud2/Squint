@@ -40,6 +40,13 @@
 #include "Reactions.h"
 #include "TextPanel.h"
 #include "Voice.h"
+#if defined(ARDUINO)
+#include "PiLink.h"  // Wi-Fi commands from the Pi (docs/tab5-pi.md)
+#endif
+
+// Arduino puts function prototypes above the first function, i.e. above `struct Defaults`
+// below; this forward declaration lets `static Defaults defaultsFor(Reaction)` compile.
+struct Defaults;
 
 face::OttoFace ottoFace;
 text::TextPanel textPanel;
@@ -254,12 +261,16 @@ void setup() {
   }
 
   react(Reaction::Sleep);  // Asleep until a person approaches or a dose is due.
+#if defined(ARDUINO)
+  piLink::begin();
+#endif
 }
 
 void loop() {
   M5.update();
 #if defined(ARDUINO)
   readSerial();
+  piLink::poll(handleCommand);
 #endif
   readTouch();
   updateDemo();

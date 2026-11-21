@@ -15,6 +15,7 @@
                   (Kathy's format; pass each line to handleCommand())
                   POST /doses/confirm {"med", "for", "taken": true|false}  ("Did you take it?")
     Testing:      POST /intake {"person", "confidence"}  (until hand-to-mouth is built)
+                  POST /tab5/send {"line": "happy Well done!"}  (queue any face command)
 
 Events (all have "type" and "time"):
     people_present   {"people": [...], "unknown": n, "seq": n}
@@ -143,7 +144,7 @@ def make_handler(hub, bottles=None, coord=None):
         def do_POST(self):
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
-            if coord is not None and u.path in ("/people", "/medications", "/doses/confirm", "/intake"):
+            if coord is not None and u.path in ("/people", "/medications", "/doses/confirm", "/intake", "/tab5/send"):
                 b = self._jbody()
                 if b is None:
                     return self._json({"error": "body must be JSON"}, 400)
@@ -151,6 +152,11 @@ def make_handler(hub, bottles=None, coord=None):
                     return self._json(coord.store.add_person(b), 201)
                 if u.path == "/medications":
                     return self._json(coord.store.add_med(b), 201)
+                if u.path == "/tab5/send":
+                    if not b.get("line"):
+                        return self._json({"error": "need {\"line\": \"...\"}"}, 400)
+                    coord.show(str(b["line"]))
+                    return self._json({"ok": True, "seq": coord.tab5.seq})
                 if u.path == "/intake":
                     hub.publish({"type": "intake", "person": b.get("person"), "confidence": float(b.get("confidence", 0))})
                     return self._json({"ok": True})

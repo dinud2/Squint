@@ -11,3 +11,5 @@ vision/data/
 # personal data: face photos, embeddings, bottle photos. Never commit.
 buddy/data/
 *.blend1
+# Wi-Fi password for the Tab5
+tab5-face/secrets.h
