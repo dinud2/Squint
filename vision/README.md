@@ -47,7 +47,8 @@ python3 vision_main.py --source http://localhost:8080/stream --bottle-every 2
 ```
 
 `camera_check` must show **nose ≥ 80%** and a wrist visible when you raise a hand to your mouth.
-If the face is cut off, move the camera back or tilt it (the simulator says a wide lens is needed at 60 cm).
+The station camera is the standard Camera Module 3 (~66°): Margaret should be about 0.9–1.4 m away.
+If the face or hands are cut off, move the camera back or tilt it. The intake model is trained for this framing.
 
 ## What Part C puts on the bus
 

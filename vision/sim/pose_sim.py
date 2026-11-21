@@ -21,7 +21,7 @@ mouth; None for negatives).
 """
 import numpy as np
 
-F, W, H = 330.0, 640, 480    # Pi Camera Module 3 Wide (~102 deg diagonal) at 640x480
+F, W, H = 493.0, 640, 480    # Pi Camera Module 3, standard lens (~66 deg horizontal) at 640x480
 NOSE, LEYE, REYE, LEAR, REAR, LSHO, RSHO, LELB, RELB, LWRI, RWRI, LHIP, RHIP = range(13)
 
 POSITIVE = ["bottle_to_mouth", "palm_to_mouth", "bottle_to_mouth_slow", "hesitant_intake"]
@@ -58,9 +58,9 @@ class Person:
         k = rng.uniform(0.85, 1.15)
         self.k = k
         self.L1, self.L2 = 0.30 * k, 0.26 * k
-        self.Z = rng.uniform(0.5, 1.0)
+        self.Z = rng.uniform(0.9, 1.4)       # standard lens: stand back so face + hands fit
         self.x0 = rng.uniform(-0.12, 0.12)
-        self.y_sh = rng.uniform(-0.06, 0.10)      # shoulders vs camera (camera ~chin/chest height, face in view)
+        self.y_sh = rng.uniform(-0.05, 0.12)      # shoulders vs camera height (face and hands in view)
         self.yaw = rng.uniform(-0.45, 0.45)
         self.roll = rng.uniform(-0.08, 0.08)
         self.hand = "r" if rng.random() < 0.75 else "l"
