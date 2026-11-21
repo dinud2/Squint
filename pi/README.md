@@ -1,16 +1,20 @@
 # Pi camera stream
 
-Streams the Raspberry Pi 5 camera (QNX 8, Camera Module 3 / imx708) as MJPEG over HTTP.
+Streams the Raspberry Pi 5 camera (QNX 8) as MJPEG over HTTP. The camera in use is a
+**Logitech C270 USB webcam** (camera unit 5), not a Camera Module.
 
 ## Build and run (on the Pi)
 
 ```sh
 gcc -O2 -Wall -o camstream camstream.c -lcamapi -l:libturbojpeg.so.0 -lsocket
-nohup ./camstream 5 8080 > camstream.log 2>&1 &   # args: [unit=5] [port=8080] [quality=75]
+nohup ./camstream 5 8080 > camstream.log 2>&1 &
+# args: [unit=5] [port=8080] [quality=75] [width=960] [height=544] [fps=20]
 ```
 
-Camera unit 5 is the real camera; unit 1 is the built-in simulator.
-Stop it with `slay camstream` (only one process can hold the camera).
+Camera unit 5 is the USB webcam; unit 1 is the built-in simulator. Units 3 and 4 are the
+Camera Module (imx708) ports, empty right now.
+Stop it with `slay ./camstream` (QNX names it with the `./`) or `kill <pid>`. Only one
+process can hold the camera.
 
 ## Endpoints
 
@@ -23,7 +27,13 @@ Stop it with `slay camstream` (only one process can hold the camera).
 - No camera or turbojpeg headers ship on the device, so `camstream.c` declares
   the few functions it uses. The `camera_buffer_t` offsets it relies on were
   read off a live frame with `probe.c` (`gcc -o probe probe.c -lcamapi && ./probe 5`).
-- Default output is 640×480 YCbYCr at roughly 20 fps.
+- Default output is 960×544 YCbYCr at 20 fps. Uncompressed over USB 2 the C270 does
+  640×480 @ 30, 864×480 @ 24, 960×544 @ 20, 800×600 @ 15 and 1280×720 only @ 10
+  (too slow for intake, which wants ≥ 12 fps). The QNX driver doesn't offer the
+  C270's compressed MJPEG mode, so higher sizes at full speed aren't available.
+- The viewfinder property ids (0 format, 1 width, 2 height, 3 framerate) were read
+  back from the device. The frame rate must be lowered before the size is raised,
+  otherwise the size is rejected.
 
 ## Running it for Squint
 
@@ -36,7 +46,10 @@ Stop it with `slay camstream` (only one process can hold the camera).
 - **If the camera stalls, the stream simply goes quiet.** That is intended: vision gives up
   after 5 s, its `alive` heartbeat stops and the alarm turns amber. Never resend an old frame.
 
-## Framing (standard Camera Module 3, ~66° field of view, not the Wide)
+## Framing
+
+Written for the standard Camera Module 3 (~66°). The C270 is narrower (~55° diagonal) and
+960×544 is wide-screen, so stand a little further back than the numbers below.
 
 Squint needs Margaret's **face and hands** in view. With the standard lens that means about
 **0.9–1.4 m** from the camera, lens roughly at chest-to-chin height, tilted slightly up.
