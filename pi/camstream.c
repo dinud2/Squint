@@ -1,6 +1,6 @@
 // camstream: QNX (Raspberry Pi 5) camera -> MJPEG over HTTP.
 //   build: gcc -O2 -Wall -o camstream camstream.c -lcamapi -l:libturbojpeg.so.0 -lsocket
-//   run:   ./camstream [unit=5] [port=8080] [quality=75]
+//   run:   ./camstream [unit=5] [port=8080] [quality=75] [width=960] [height=544] [fps=20]
 //   view:  http://<pi-ip>:8080/          (page)
 //          http://<pi-ip>:8080/stream    (raw MJPEG, works in OpenCV/ffplay)
 //          http://<pi-ip>:8080/snapshot.jpg
@@ -9,6 +9,11 @@
 // need are written out here. camera_buffer_t layout was verified with probe.c:
 //   +0  frametype (14 = YCbYCr / YUYV), +16 framebuf pointer,
 //   +72 framedesc: height, width, stride (uint32 each).
+// Viewfinder property ids (read back with prop.c): 0 format, 1 width, 2 height,
+// 3 framerate (double); the list ends with -1 (CAMERA_IMGPROP_END).
+// Unit 5 is a USB Logitech C270. Uncompressed (YUYV) over USB 2 it manages
+// 640x480@30, 864x480@24, 960x544@20, 800x600@15, and 1280x720 only @10.
+// The frame rate must be lowered BEFORE the size is raised, or the size is rejected (22).
 
 #include <errno.h>
 #include <netinet/in.h>
@@ -30,6 +35,13 @@ extern int camera_start_viewfinder(camera_handle_t h,
                                    void (*st)(camera_handle_t, int, uint16_t, void *),
                                    void *arg);
 extern int camera_stop_viewfinder(camera_handle_t h);
+// camera_set_vf_property() is a header macro around this; the arg list ends with -1
+extern int camera_private_set_vf_property(camera_handle_t h, ...);
+extern int camera_private_get_vf_property(camera_handle_t h, ...);
+#define VF_WIDTH 1
+#define VF_HEIGHT 2
+#define VF_FRAMERATE 3   /* double */
+#define VF_END (-1)
 
 typedef void *tjhandle;
 extern tjhandle tjInitCompress(void);
@@ -181,15 +193,36 @@ done:
 }
 
 static volatile sig_atomic_t stop;
-static void on_sig(int s) { (void)s; stop = 1; }
+static int listen_fd = -1;
+
+// SIGINT/SIGTERM are blocked in every thread (camera callbacks, clients) and taken here,
+// so `slay`/`kill` always stop the server. Shutting down the listening socket wakes accept().
+static void *signal_thread(void *arg) {
+    sigset_t *set = arg;
+    int sig;
+    sigwait(set, &sig);
+    stop = 1;
+    if (listen_fd >= 0) shutdown(listen_fd, SHUT_RDWR);
+    return NULL;
+}
 
 int main(int argc, char **argv) {
     int unit = argc > 1 ? atoi(argv[1]) : 5;
     int port = argc > 2 ? atoi(argv[2]) : 8080;
     if (argc > 3) quality = atoi(argv[3]);
+    int width = argc > 4 ? atoi(argv[4]) : 960;
+    int height = argc > 5 ? atoi(argv[5]) : 544;
+    double fps = argc > 6 ? atof(argv[6]) : 20.0;
     signal(SIGPIPE, SIG_IGN);
-    signal(SIGINT, on_sig);
-    signal(SIGTERM, on_sig);
+    // Block before any thread exists so every thread inherits the mask (see signal_thread).
+    static sigset_t sigs;
+    sigemptyset(&sigs);
+    sigaddset(&sigs, SIGINT);
+    sigaddset(&sigs, SIGTERM);
+    pthread_sigmask(SIG_BLOCK, &sigs, NULL);
+    pthread_t sig_t;
+    pthread_create(&sig_t, NULL, signal_thread, &sigs);
+    pthread_detach(sig_t);
 
     tj = tjInitCompress();
     if (!tj) { fprintf(stderr, "tjInitCompress failed\n"); return 1; }
@@ -198,6 +231,14 @@ int main(int argc, char **argv) {
     int e = camera_open(unit, 0xF, &cam);
     if (e) e = camera_open(unit, 0x5, &cam);
     if (e) { fprintf(stderr, "camera_open(unit %d) failed: %d\n", unit, e); return 1; }
+    // Must be set before the viewfinder starts. On failure keep the camera's default size.
+    if ((e = camera_private_set_vf_property(cam, VF_FRAMERATE, fps, VF_END)))
+        fprintf(stderr, "could not set %.1f fps (err %d)\n", fps, e);
+    if ((e = camera_private_set_vf_property(cam, VF_WIDTH, width, VF_HEIGHT, height, VF_END)))
+        fprintf(stderr, "could not set %dx%d (err %d), using the camera default\n", width, height, e);
+    uint32_t w = 0, h = 0;
+    double fr = 0;
+    camera_private_get_vf_property(cam, VF_WIDTH, &w, VF_HEIGHT, &h, VF_FRAMERATE, &fr, VF_END);
     if ((e = camera_start_viewfinder(cam, on_frame, NULL, NULL))) {
         fprintf(stderr, "camera_start_viewfinder failed: %d\n", e);
         camera_close(cam);
@@ -205,6 +246,7 @@ int main(int argc, char **argv) {
     }
 
     int s = socket(AF_INET, SOCK_STREAM, 0);
+    listen_fd = s;
     int one = 1;
     setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
     struct sockaddr_in a = {.sin_family = AF_INET, .sin_port = htons(port), .sin_addr.s_addr = INADDR_ANY};
@@ -212,12 +254,17 @@ int main(int argc, char **argv) {
         perror("bind/listen");
         return 1;
     }
-    printf("camstream: unit %d, serving http://0.0.0.0:%d/\n", unit, port);
+    printf("camstream: unit %d, %ux%u @ %.1f fps, serving http://0.0.0.0:%d/\n", unit, w, h, fr, port);
     fflush(stdout);
 
     while (!stop) {
         int c = accept(s, NULL, NULL);
-        if (c < 0) { if (errno == EINTR) continue; perror("accept"); break; }
+        if (c < 0) {
+            if (stop) break;
+            if (errno == EINTR) continue;
+            perror("accept");
+            break;
+        }
         setsockopt(c, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
         pthread_t t;
         if (pthread_create(&t, NULL, client, (void *)(intptr_t)c) == 0) pthread_detach(t);
