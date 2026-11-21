@@ -1,41 +1,39 @@
-// OttoFace.h - plays the Otto eye GIFs in the face zone of an upright Tab5.
+// OttoFace.h - the companion's eyes, drawn in code at the display's 60 Hz.
 //
-// - The GIFs are 480 x 480, 16 grey levels, made by tools/otto/generate_emojis.py.
-//   AnimatedGIF decodes at most 480 px wide on the ESP32, so the face is drawn
-//   1.25x larger (600 x 600) with smoothing.
-// - They are flashed with the sketch (src/gifs/*.h), so no SD card is needed.
-// - Each reaction picks one GIF and one colour. The grey levels become shades
-//   of that colour, so the eyes turn amber for "check this" and red for STOP.
-// - Every GIF loop starts and ends on the neutral eyes, so switching is smooth.
+// Same expressions as the Otto eye GIFs (docs/all-reactions.png), redrawn from smooth,
+// anti-aliased shapes every frame instead of played from GIFs, so motion is fluid:
+// blinks, glances, bounces and heartbeats are computed per frame, and changing
+// expression is a quick blink (close the old eyes, open the new ones).
+// Minimal on purpose: only accents that carry meaning are kept (z, ?, sparkle).
+//
+//   idle       round eyes that glance around and blink          white
+//   greet      ^^ smiling crescents, gentle bounce               white
+//   remind     one eye + a wink, sparkle                          white
+//   happy      hearts with a heartbeat                            white
+//   concerned  tall eye + half-closed eye, "?"                    amber
+//   stop       ring eyes, red frame around the face               red
+//   wrong      lowered eyes glancing away                         amber
+//   sleep      closed eyes, slow breathing, z's                   dim blue
 
 #pragma once
 
 #include <M5Unified.h>
-// Keep AnimatedGIF after M5Unified: both define PROGMEM helpers.
-#include <AnimatedGIF.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 
 #include "Reactions.h"
-#include "src/gifs/otto_confused.h"
-#include "src/gifs/otto_embarrassed.h"
-#include "src/gifs/otto_happy.h"
-#include "src/gifs/otto_loving.h"
-#include "src/gifs/otto_neutral.h"
-#include "src/gifs/otto_asleep.h"
-#include "src/gifs/otto_fall_asleep.h"
-#include "src/gifs/otto_shocked.h"
-#include "src/gifs/otto_winking.h"
 
 namespace face {
 
 // ---- Layout (screen pixels, portrait 720 x 1280) ---------------------------
 constexpr int kWidth = 720;
-constexpr int kFaceBottom = 600;  // Face zone is y 0 .. 600.
-constexpr int kGifSize = 480;         // AnimatedGIF's width limit on ESP32.
-constexpr float kGifZoom = 1.25f;     // 480 -> 600 px on screen.
-constexpr int kFaceCenterX = kWidth / 2;
-constexpr int kFaceCenterY = kFaceBottom / 2;
+constexpr int kFaceBottom = 600;  // Face zone is y 0 .. 600 (text panel below).
+constexpr float kEyeSize = 210.0f;     // Eye diameter (the GIF eyes were ~185 px).
+constexpr float kEyeGap = 330.0f;      // Distance between eye centres.
+constexpr float kEyeY = 300.0f;        // Eye centre height.
+constexpr uint32_t kFrameUs = 16667;   // 60 Hz.
 
 // ---- Colours ---------------------------------------------------------------
 struct Rgb {
@@ -60,138 +58,504 @@ inline Rgb colorFor(Reaction r) {
 inline uint16_t color565(Rgb c) {
   return ((c.r & 0xF8) << 8) | ((c.g & 0xFC) << 3) | (c.b >> 3);
 }
-
-// ---- Which GIF for which reaction ------------------------------------------
-struct Gif {
-  const uint8_t* data;
-  uint32_t len;
-};
-
-// intro plays once (if set), then loop repeats.
-struct Clip {
-  Gif intro;
-  Gif loop;
-};
-
-inline Clip clipFor(Reaction r) {
-  switch (r) {
-    case Reaction::Greeting:    return {{}, {kOtto_happy, kOtto_happy_len}};
-    case Reaction::Reminder:    return {{}, {kOtto_winking, kOtto_winking_len}};
-    case Reaction::Happy:       return {{}, {kOtto_loving, kOtto_loving_len}};
-    case Reaction::Concerned:   return {{}, {kOtto_confused, kOtto_confused_len}};
-    case Reaction::Stop:        return {{}, {kOtto_shocked, kOtto_shocked_len}};
-    case Reaction::WrongPerson: return {{}, {kOtto_embarrassed, kOtto_embarrassed_len}};
-    case Reaction::Sleep:       // Eyes close once, then stay closed.
-      return {{kOtto_fall_asleep, kOtto_fall_asleep_len}, {kOtto_asleep, kOtto_asleep_len}};
-    default:                    return {{}, {kOtto_neutral, kOtto_neutral_len}};
-  }
+inline Rgb scaled(Rgb c, float k) {
+  k = std::max(0.0f, std::min(1.0f, k));
+  return {(uint8_t)(c.r * k), (uint8_t)(c.g * k), (uint8_t)(c.b * k)};
 }
 
-// ---- Player ----------------------------------------------------------------
+// ---- Easing ----------------------------------------------------------------
+inline float clamp01(float x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
+inline float easeInOut(float x) { x = clamp01(x); return x * x * (3 - 2 * x); }
+inline float easeOutBack(float x) {
+  x = clamp01(x);
+  const float c1 = 1.4f, c3 = c1 + 1;
+  return 1 + c3 * powf(x - 1, 3) + c1 * powf(x - 1, 2);
+}
+inline float frand(float a, float b) { return a + (b - a) * (float)(rand() % 10000) / 10000.0f; }
+constexpr float kPi = 3.14159265f;
+
+// ---- Renderer ----------------------------------------------------------------
 class OttoFace {
  public:
   bool begin() {
-    gifCanvas_.setPsram(true);
-    gifCanvas_.setColorDepth(16);
-    frameCanvas_.setPsram(true);
-    frameCanvas_.setColorDepth(16);
-    if (!gifCanvas_.createSprite(kGifSize, kGifSize)) return false;
-    if (!frameCanvas_.createSprite(kWidth, kFaceBottom)) return false;
-    gif_.begin(GIF_PALETTE_RGB565_LE);
+    canvas_.setPsram(true);
+    canvas_.setColorDepth(16);
+    if (!canvas_.createSprite(kWidth, kFaceBottom)) return false;
+    // Pre-render the hearts: anti-aliased circles are costly, copying a sprite is not.
+    for (int i = 0; i < kHeartSteps; ++i) {
+      const float sz = kEyeSize * 1.08f * (1 + 0.07f * i / (kHeartSteps - 1));
+      heartSize_[i] = sz;
+      const int w = (int)(sz * 1.12f) + 8;
+      hearts_[i].setPsram(true);
+      hearts_[i].setColorDepth(16);
+      if (!hearts_[i].createSprite(w, w)) return false;
+      hearts_[i].fillSprite(kBackground);
+      g_ = &hearts_[i];
+      heart(w / 2.0f, w / 2.0f, sz, color565(kWhite));
+      g_ = &canvas_;
+    }
+    lastUs_ = nextUs_ = lgfx::micros();
+    nextBlinkMs_ = lgfx::millis() + 2500;
+    nextGlanceMs_ = lgfx::millis() + 1500;
     return true;
   }
 
-  // Call often from loop(). Draws the next frame when it is due.
+  // Call often from loop(): draws a frame every 16.7 ms.
   void update() {
+    const uint32_t nowUs = lgfx::micros();
+    if ((int32_t)(nowUs - nextUs_) < 0) return;
+    nextUs_ += kFrameUs;
+    if ((int32_t)(nowUs - nextUs_) > 0) nextUs_ = nowUs + kFrameUs;  // fell behind: don't burst
+    const float dt = std::min(0.1f, (nowUs - lastUs_) / 1e6f);
+    lastUs_ = nowUs;
+
     const ReactionState s = reactions::get();
-    if (!open_ || s.reaction != reaction_ || s.sinceMs != sinceMs_) start(s);
-
-    const uint32_t now = lgfx::millis();
-    if ((int32_t)(now - nextFrameMs_) < 0) return;
-
-    int delayMs = 80;
-    if (gif_.playFrame(false, &delayMs, this) == 0) {
-      if (inIntro_) {
-        openGif(clipFor(reaction_).loop);  // Intro done: start the loop.
-        inIntro_ = false;
+    if (s.reaction != shown_) {
+      if (!started_) {
+        shown_ = prev_ = s.reaction;
+        started_ = true;
       } else {
-        gif_.reset();  // Loop.
+        prev_ = shown_;
+        shown_ = s.reaction;
+        changeMs_ = lgfx::millis();
       }
     }
-    nextFrameMs_ = now + (delayMs > 0 ? delayMs : 80);
-    present();
+    const uint32_t t0 = lgfx::micros();
+    // Dirty rectangles: only what was drawn last frame is cleared, and only the union of
+    // last frame's and this frame's ink is sent to the display (the whole face zone is
+    // 430k pixels; pushing it every frame alone took ~36 ms).
+    fill(prevInk_[0], kBackground);
+    fill(prevInk_[1], kBackground);
+    ink_[0] = ink_[1] = Box{};
+    frameW_ = 0;
+    draw(dt);
+    const uint32_t t1 = lgfx::micros();
+    const Box l = unite(prevInk_[0], ink_[0]), r = unite(prevInk_[1], ink_[1]);
+    if (!l.empty() && !r.empty() && r.x0 <= l.x1) {
+      push(unite(l, r));  // they overlap: one push
+    } else {
+      push(l);
+      push(r);
+    }
+    // The STOP frame is steady: drawn and sent only when it appears or goes away.
+    if (frameW_ != prevFrameW_) {
+      if (prevFrameW_) clearStrips(prevFrameW_);
+      if (frameW_) drawStrips(frameW_);
+      pushStrips(std::max(frameW_, prevFrameW_));
+    }
+    prevInk_[0] = ink_[0];
+    prevInk_[1] = ink_[1];
+    prevFrameW_ = frameW_;
+    drawUs_ += t1 - t0;
+    stats(lgfx::micros() - t0);
   }
 
  private:
-  AnimatedGIF gif_;
-  M5Canvas gifCanvas_{&M5.Display};    // Keeps the GIF picture between delta frames.
-  M5Canvas frameCanvas_{&M5.Display};  // Whole face zone: GIF + STOP frame.
-  uint16_t lut_[16] = {};              // Grey level -> tinted colour (byte-swapped).
-  Reaction reaction_ = Reaction::Idle;
-  uint32_t sinceMs_ = 0;
-  uint32_t nextFrameMs_ = 0;
-  bool open_ = false;
-  bool inIntro_ = false;
+  M5Canvas canvas_{&M5.Display};
+  M5Canvas* g_ = &canvas_;  // where the shape helpers draw
+  static constexpr int kHeartSteps = 8;
+  M5Canvas hearts_[kHeartSteps];  // the heart at each heartbeat size, drawn once at start
+  float heartSize_[kHeartSteps] = {};
+  Reaction shown_ = Reaction::Sleep, prev_ = Reaction::Sleep;
+  bool started_ = false;
+  uint32_t changeMs_ = 0, nextUs_ = 0, lastUs_ = 0;
+  // idle motion
+  float gazeX_ = 0, gazeY_ = 0, gazeTX_ = 0, gazeTY_ = 0;
+  uint32_t nextBlinkMs_ = 0, blinkStartMs_ = 0, nextGlanceMs_ = 0;
+  bool doubleBlink_ = false;
+  // stats
+  uint32_t frames_ = 0, workUs_ = 0, statMs_ = 0, drawUs_ = 0;
+  // dirty rectangles
+  struct Box {
+    int x0 = 1 << 20, y0 = 1 << 20, x1 = -1, y1 = -1;  // empty
+    bool empty() const { return x1 < x0 || y1 < y0; }
+  };
+  Box ink_[2], prevInk_[2];  // left / right half: the gap between the eyes is never sent
+  int frameW_ = 0, prevFrameW_ = 0;
 
-  void start(const ReactionState& s) {
-    // Same GIF and only new words (or a refreshed timer)? Keep playing.
-    const bool sameClip = open_ && clipFor(s.reaction).loop.data == clipFor(reaction_).loop.data;
-    reaction_ = s.reaction;
-    sinceMs_ = s.sinceMs;
-    buildLut(colorFor(s.reaction));
-    if (sameClip) return;
-
-    const Clip clip = clipFor(s.reaction);
-    inIntro_ = clip.intro.data != nullptr;
-    openGif(inIntro_ ? clip.intro : clip.loop);
-    gifCanvas_.fillSprite(kBackground);
-    nextFrameMs_ = lgfx::millis();
+  static Box unite(const Box& a, const Box& b) {
+    if (a.empty()) return b;
+    if (b.empty()) return a;
+    return {std::min(a.x0, b.x0), std::min(a.y0, b.y0), std::max(a.x1, b.x1), std::max(a.y1, b.y1)};
+  }
+  void mark(float x0, float y0, float x1, float y1) {
+    const int m = 3;  // anti-aliasing fringe
+    Box& b = ink_[(x0 + x1) / 2 < kWidth / 2 ? 0 : 1];
+    b = unite(b, Box{std::max(0, (int)x0 - m), std::max(0, (int)y0 - m),
+                     std::min(kWidth - 1, (int)x1 + m), std::min(kFaceBottom - 1, (int)y1 + m)});
+  }
+  void fill(const Box& b, uint16_t c) {
+    if (!b.empty()) g_->fillRect(b.x0, b.y0, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1, c);
+  }
+  void push(const Box& b) {
+    if (b.empty()) return;
+    M5.Display.setClipRect(b.x0, b.y0, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1);
+    canvas_.pushSprite(&M5.Display, 0, 0);
+    M5.Display.clearClipRect();
+  }
+  // STOP frame strips (top, bottom, left, right) of width w.
+  void clearStrips(int w) {
+    g_->fillRect(0, 0, kWidth, w, kBackground);
+    g_->fillRect(0, kFaceBottom - w, kWidth, w, kBackground);
+    g_->fillRect(0, 0, w, kFaceBottom, kBackground);
+    g_->fillRect(kWidth - w, 0, w, kFaceBottom, kBackground);
+  }
+  void drawStrips(int w) {
+    const uint16_t red = color565(kRed);
+    for (int i = 0; i < w; ++i) g_->drawRoundRect(i, i, kWidth - 2 * i, kFaceBottom - 2 * i, 40, red);
+  }
+  void pushStrips(int w) {
+    const int corner = 44;  // rounded corners reach a little further in
+    push(Box{0, 0, kWidth - 1, std::max(w, corner)});
+    push(Box{0, kFaceBottom - 1 - std::max(w, corner), kWidth - 1, kFaceBottom - 1});
+    push(Box{0, 0, w, kFaceBottom - 1});
+    push(Box{kWidth - 1 - w, 0, kWidth - 1, kFaceBottom - 1});
   }
 
-  void openGif(const Gif& g) {
-    if (open_) gif_.close();
-    open_ = gif_.open(const_cast<uint8_t*>(g.data), (int)g.len, onDraw) != 0;
+  static constexpr uint32_t kCloseMs = 110, kOpenMs = 170;  // expression change = a blink
+
+  // ---------------------------------------------------------------- stamp cache
+  // A shape that does not change between frames is drawn once into its own small
+  // sprite (cropped to its ink) and then copied each frame: anti-aliased edges are the
+  // costly part of drawing, copying is cheap. Blinks and pop-ins still draw live.
+  struct Stamp {
+    uint32_t key;
+    M5Canvas* spr;
+    int ax, ay;  // where the anchor point (x, y) sits inside the sprite
+  };
+  static constexpr int kMaxStamps = 96;
+  Stamp stamps_[kMaxStamps];
+  int nStamps_ = 0;
+
+  template <typename F>
+  void stamp(uint32_t key, int size, float x, float y, F render) {
+    Stamp* st = nullptr;
+    for (int i = 0; i < nStamps_; ++i)
+      if (stamps_[i].key == key) { st = &stamps_[i]; break; }
+    if (!st) {
+      if (nStamps_ == kMaxStamps) {  // full (should not happen): draw live
+        render(x, y);
+        return;
+      }
+      // Render at the centre of a size x size scratch sprite, then crop to the ink.
+      M5Canvas scratch;
+      scratch.setPsram(true);
+      scratch.setColorDepth(16);
+      if (!scratch.createSprite(size, size)) { render(x, y); return; }
+      scratch.fillSprite(kBackground);
+      Box keep[2] = {ink_[0], ink_[1]};
+      ink_[0] = ink_[1] = Box{};
+      g_ = &scratch;
+      render(size / 2.0f, size / 2.0f);
+      g_ = &canvas_;
+      Box tb = unite(ink_[0], ink_[1]);
+      ink_[0] = keep[0];
+      ink_[1] = keep[1];
+      if (tb.empty()) return;
+      tb.x1 = std::min(tb.x1, size - 1);
+      tb.y1 = std::min(tb.y1, size - 1);
+      auto* spr = new M5Canvas();
+      spr->setPsram(true);
+      spr->setColorDepth(16);
+      if (!spr->createSprite(tb.x1 - tb.x0 + 1, tb.y1 - tb.y0 + 1)) { delete spr; render(x, y); return; }
+      scratch.pushSprite(spr, -tb.x0, -tb.y0);
+      scratch.deleteSprite();
+      stamps_[nStamps_] = {key, spr, size / 2 - tb.x0, size / 2 - tb.y0};
+      st = &stamps_[nStamps_++];
+    }
+    const int px = (int)lroundf(x) - st->ax, py = (int)lroundf(y) - st->ay;
+    // Transparent copy: skipping the black pixels measured faster than an opaque copy.
+    st->spr->pushSprite(&canvas_, px, py, kBackground);
+    mark(px + 3, py + 3, px + st->spr->width() - 4, py + st->spr->height() - 4);
+  }
+  static uint32_t key(uint32_t shape, uint32_t a = 0, uint32_t b = 0) { return (shape << 24) | (a << 12) | b; }
+
+  // ---------------------------------------------------------------- primitives
+  // Rounded eye (circle when w == h, pill when squashed). Anti-aliased.
+  void blob(float cx, float cy, float w, float h, uint16_t c) {
+    w = std::max(w, 6.0f);
+    h = std::max(h, 6.0f);
+    const float r = std::min(w, h) / 2;
+    mark(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
+    g_->fillSmoothRoundRect((int32_t)(cx - w / 2), (int32_t)(cy - h / 2), (int32_t)w, (int32_t)h,
+                                (int32_t)r, c);
+  }
+  // Thick anti-aliased arc with round ends. Angles in degrees, y down.
+  void stroke(float cx, float cy, float r, float a0, float a1, float thick, uint16_t c) {
+    // ~15 degrees per segment: still round at these thicknesses, and drawWideLine is the
+    // costly part (18 segments made the sleeping face run at 28 fps).
+    const int n = std::max(4, std::min(18, (int)(fabsf(a1 - a0) / 15.0f + 0.5f)));
+    float px = cx + r * cosf(a0 * kPi / 180), py = cy + r * sinf(a0 * kPi / 180);
+    float x0 = px, y0 = py, x1 = px, y1 = py;  // tight box: an arc covers a thin band, not its circle
+    for (int i = 1; i <= n; ++i) {
+      const float a = (a0 + (a1 - a0) * i / n) * kPi / 180;
+      const float x = cx + r * cosf(a), y = cy + r * sinf(a);
+      g_->drawWideLine(px, py, x, y, thick / 2, c);
+      px = x;
+      py = y;
+      x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y);
+    }
+    mark(x0 - thick, y0 - thick, x1 + thick, y1 + thick);
+  }
+  void disc(float cx, float cy, float r, uint16_t c) {
+    if (c != kBackground) mark(cx - r, cy - r, cx + r, cy + r);
+    g_->fillSmoothCircle(cx, cy, r, c);
+  }
+  void line(float x0, float y0, float x1, float y1, float thick, uint16_t c) {
+    mark(std::min(x0, x1) - thick, std::min(y0, y1) - thick, std::max(x0, x1) + thick, std::max(y0, y1) + thick);
+    g_->drawWideLine(x0, y0, x1, y1, thick / 2, c);
+  }
+  void heart(float cx, float cy, float s, uint16_t c) {
+    const float r = 0.27f * s;
+    mark(cx - 0.55f * s, cy - 0.42f * s, cx + 0.55f * s, cy + 0.55f * s);
+    g_->fillSmoothCircle(cx - 0.25f * s, cy - 0.12f * s, r, c);
+    g_->fillSmoothCircle(cx + 0.25f * s, cy - 0.12f * s, r, c);
+    const float lx = cx - 0.5f * s, rx = cx + 0.5f * s, ty = cy - 0.02f * s, by = cy + 0.5f * s;
+    g_->fillTriangle(lx, ty, rx, ty, cx, by, c);
+    g_->fillRect(cx - 0.25f * s, cy - 0.15f * s, 0.5f * s, 0.2f * s, c);
+    line(lx + 1, ty, cx, by - 1, 3, c);  // soften the slanted edges
+    line(rx - 1, ty, cx, by - 1, 3, c);
+  }
+  void sparkle(float cx, float cy, float s, uint16_t c) {
+    const float w = 0.16f * s;
+    mark(cx - s, cy - s, cx + s, cy + s);
+    g_->drawWedgeLine(cx, cy, cx, cy - s, w, 0.5f, c);
+    g_->drawWedgeLine(cx, cy, cx, cy + s, w, 0.5f, c);
+    g_->drawWedgeLine(cx, cy, cx - s, cy, w, 0.5f, c);
+    g_->drawWedgeLine(cx, cy, cx + s, cy, w, 0.5f, c);
+  }
+  void question(float cx, float cy, float s, uint16_t c) {
+    const float r = 0.32f * s, th = 0.16f * s;
+    mark(cx - 0.55f * s, cy - 0.7f * s, cx + 0.55f * s, cy + 0.65f * s);
+    stroke(cx, cy - 0.25f * s, r, 180, 420, th, c);  // hook over the top
+    const float ex = cx + r * cosf(420 * kPi / 180), ey = cy - 0.25f * s + r * sinf(420 * kPi / 180);
+    line(ex, ey, cx, cy + 0.22f * s, th, c);
+    g_->fillSmoothCircle(cx, cy + 0.48f * s, th * 0.6f, c);
+  }
+  void zee(float cx, float cy, float s, uint16_t c) {
+    const float h = s / 2, th = std::max(4.0f, 0.18f * s);
+    line(cx - h, cy - h, cx + h, cy - h, th, c);
+    line(cx + h, cy - h, cx - h, cy + h, th, c);
+    line(cx - h, cy + h, cx + h, cy + h, th, c);
   }
 
-  void buildLut(Rgb c) {
-    for (int i = 0; i < 16; ++i) {
-      Rgb shade{(uint8_t)(c.r * i / 15), (uint8_t)(c.g * i / 15), (uint8_t)(c.b * i / 15)};
-      const uint16_t v = color565(shade);
-      lut_[i] = (uint16_t)((v << 8) | (v >> 8));  // Sprites store RGB565 big-endian.
+  // ---------------------------------------------------------------- idle motion
+  void updateIdleMotion(float dt, uint32_t now, bool glance) {
+    if (glance && (int32_t)(now - nextGlanceMs_) >= 0) {
+      const bool center = (rand() % 3) == 0;
+      gazeTX_ = center ? 0 : frand(-1, 1);
+      gazeTY_ = center ? 0 : frand(-0.6f, 0.6f);
+      nextGlanceMs_ = now + (uint32_t)frand(1400, 3800);
+    }
+    if (!glance) gazeTX_ = gazeTY_ = 0;
+    const float k = 1 - expf(-dt / 0.07f);  // quick, smooth saccade
+    gazeX_ += (gazeTX_ - gazeX_) * k;
+    gazeY_ += (gazeTY_ - gazeY_) * k;
+    if ((int32_t)(now - nextBlinkMs_) >= 0) {
+      blinkStartMs_ = now;
+      doubleBlink_ = (rand() % 5) == 0;
+      nextBlinkMs_ = now + (uint32_t)frand(2600, 5600);
     }
   }
-
-  // AnimatedGIF calls this once per line of each frame.
-  static void onDraw(GIFDRAW* d) {
-    auto* self = static_cast<OttoFace*>(d->pUser);
-    const int y = d->iY + d->y;
-    if (y < 0 || y >= kGifSize) return;
-    auto* row = static_cast<uint16_t*>(self->gifCanvas_.getBuffer()) + y * kGifSize;
-    const uint8_t* px = d->pPixels;
-    const bool transparent = d->ucHasTransparency;
-    const uint8_t clear = d->ucTransparent;
-    const int x0 = d->iX;
-    const int w = std::min(d->iWidth, kGifSize - x0);
-    for (int i = 0; i < w; ++i) {
-      const uint8_t index = px[i];
-      if (transparent && index == clear) continue;  // Unchanged pixel (delta frame).
-      row[x0 + i] = self->lut_[index & 15];
-    }
+  // 1 = open, ~0 = closed.
+  float blinkOpen(uint32_t now) const {
+    const uint32_t d = now - blinkStartMs_;
+    const uint32_t len = 150;
+    auto one = [&](uint32_t x) { return x >= len ? 1.0f : fabsf(1 - 2.0f * x / len); };
+    float o = one(d);
+    if (doubleBlink_ && d >= 220) o = std::min(o, one(d - 220));
+    return 0.06f + 0.94f * easeInOut(o);
   }
 
-  void present() {
-    frameCanvas_.fillSprite(kBackground);
-    gifCanvas_.pushRotateZoomWithAA(&frameCanvas_, kFaceCenterX, kFaceCenterY, 0.0f,
-                                    kGifZoom, kGifZoom);
-    if (reaction_ == Reaction::Stop) {
-      // Steady red frame round the face, plus a thicker flash every 400 ms.
-      const int width = (lgfx::millis() / 400) % 2 == 0 ? 22 : 9;
-      const uint16_t red = color565(kRed);
-      for (int i = 0; i < width; ++i) {
-        frameCanvas_.drawRoundRect(i, i, kWidth - 2 * i, kFaceBottom - 2 * i, 40, red);
+  // ---------------------------------------------------------------- one frame
+  void draw(float dt) {
+    const uint32_t now = lgfx::millis();
+    const float t = now / 1000.0f;
+
+    // Expression change: close the old eyes, then open the new ones.
+    const uint32_t since = now - changeMs_;
+    Reaction r = shown_;
+    float openT = 1;  // 0..1 opening of the new expression
+    if (since < kCloseMs) {
+      r = prev_;
+      const float closing = 1 - easeInOut((float)since / kCloseMs);
+      drawExpression(r, t, dt, now, 0.08f + 0.92f * closing, true);
+      drawFrame(r, now);
+      return;
+    }
+    if (since < kCloseMs + kOpenMs) openT = (float)(since - kCloseMs) / kOpenMs;
+    drawExpression(r, t, dt, now, openT, false);
+    drawFrame(r, now);
+  }
+
+  // open: 0..1. closing=true squashes the eyes shut (generic pill), else the new
+  // expression opens (round eyes grow, other shapes pop in).
+  void drawExpression(Reaction r, float t, float dt, uint32_t now, float open, bool closing) {
+    const Rgb base = colorFor(r);
+    const uint16_t c = color565(base);
+    const float lx = kWidth / 2 - kEyeGap / 2, rx = kWidth / 2 + kEyeGap / 2;
+    const float D = kEyeSize;
+
+    if (closing) {  // any expression closes into two thin lids
+      const float h = std::max(10.0f, D * open);
+      blob(lx, kEyeY, D * 0.92f, h, c);
+      blob(rx, kEyeY, D * 0.92f, h, c);
+      return;
+    }
+    const float pop = open >= 1 ? 1 : easeOutBack(open);   // shapes
+    const float grow = open >= 1 ? 1 : easeInOut(open);     // round eyes
+
+    switch (r) {
+      case Reaction::Idle: {
+        updateIdleMotion(dt, now, true);
+        const float o = blinkOpen(now) * (0.08f + 0.92f * grow);
+        const float gx = gazeX_ * 46, gy = gazeY_ * 22;
+        for (float x : {lx, rx}) {
+          if (o > 0.995f)
+            stamp(key(1, (uint32_t)r), (int)D + 16, x + gx, kEyeY + gy,
+                  [&](float px, float py) { blob(px, py, D, D, c); });
+          else
+            blob(x + gx, kEyeY + gy, D, D * o, c);
+        }
+        break;
+      }
+      case Reaction::Greeting: {  // ^^ crescents
+        const float s = D * pop, y = kEyeY - 10 + 7 * sinf(t * 2 * kPi * 1.1f);
+        auto crescent = [&](float px, float py) {
+          disc(px, py, s / 2, c);
+          disc(px, py + s * 0.34f, s * 0.47f, kBackground);
+        };
+        for (float x : {lx, rx}) {
+          if (pop >= 1) stamp(key(2), (int)D + 16, x, y, crescent);
+          else crescent(x, y);
+        }
+        break;
+      }
+      case Reaction::Reminder: {  // one eye + wink, sparkle
+        updateIdleMotion(dt, now, false);
+        const float o = blinkOpen(now) * (0.08f + 0.92f * grow);
+        if (o > 0.995f) stamp(key(1, (uint32_t)r), (int)D + 16, lx, kEyeY, [&](float px, float py) { blob(px, py, D, D, c); });
+        else blob(lx, kEyeY, D, D * o, c);
+        const float tw = 0.75f + 0.25f * sinf(t * 2 * kPi * 1.3f);
+        const float sx = rx + D * 0.62f, sy = kEyeY - D * 0.55f;
+        if (pop >= 1) {
+          stamp(key(3), (int)D + 60, rx, kEyeY + D * 0.28f,
+                [&](float px, float py) { stroke(px, py, D * 0.42f, 215, 325, 26, c); });
+          const int q = std::min(7, (int)((tw - 0.5f) * 16));  // 8 sparkle sizes
+          stamp(key(4, q), 80, sx, sy, [&](float px, float py) { sparkle(px, py, 26 * (0.5f + q / 16.0f), c); });
+        } else {
+          stroke(rx, kEyeY + D * 0.28f, D * 0.42f * pop, 215, 325, 26, c);
+          sparkle(sx, sy, 26 * tw * pop, c);
+        }
+        break;
+      }
+      case Reaction::Happy: {  // hearts with a heartbeat
+        const float beat = powf(fabsf(sinf(t * kPi * 1.25f)), 6.0f);  // 0..1
+        if (open < 1) {  // popping in: draw live at any size (only for ~170 ms)
+          const float s = D * 1.08f * pop;
+          heart(lx, kEyeY, s, c);
+          heart(rx, kEyeY, s, c);
+        } else {
+          M5Canvas& h = hearts_[std::min(kHeartSteps - 1, (int)(beat * kHeartSteps))];
+          const int w = h.width();
+          for (float x : {lx, rx}) {
+            h.pushSprite(&canvas_, (int)(x - w / 2), (int)(kEyeY - w / 2), kBackground);
+            mark(x - w / 2, kEyeY - w / 2, x + w / 2, kEyeY + w / 2);
+          }
+        }
+        break;
+      }
+      case Reaction::Concerned: {  // tall eye + half-closed eye, "?"
+        updateIdleMotion(dt, now, false);
+        const float o = blinkOpen(now) * (0.08f + 0.92f * grow);
+        if (o > 0.995f)
+          stamp(key(5), (int)(D * 1.1f) + 16, lx, kEyeY, [&](float px, float py) { blob(px, py, D * 0.78f, D * 1.08f, c); });
+        else
+          blob(lx, kEyeY, D * 0.78f, D * 1.08f * o, c);
+        const float ry = kEyeY + D * 0.12f;
+        auto half = [&](float px, float py, float h) {  // round eye with a flat upper lid
+          blob(px, py, D, D, c);
+          g_->fillRect(px - D, py - D, 2 * D, D * 0.5f + (D * 0.62f - h), kBackground);
+        };
+        const float qx = rx + D * 0.6f, qy = kEyeY - D * 0.62f + 6 * sinf(t * 2 * kPi * 0.8f);
+        if (grow >= 1 && pop >= 1) {
+          stamp(key(6), (int)D + 16, rx, ry, [&](float px, float py) { half(px, py, D * 0.62f); });
+          stamp(key(7), 120, qx, qy, [&](float px, float py) { question(px, py, 70, c); });
+        } else {
+          half(rx, ry, D * 0.62f * grow);
+          question(qx, qy, 70 * pop, c);
+        }
+        break;
+      }
+      case Reaction::Stop: {  // ring eyes
+        const float w = D * 0.86f * pop, h = D * 1.02f * pop, th = 30 * pop;
+        const float wob = 2.5f * sinf(t * 2 * kPi * 7.0f);
+        auto ring = [&](float px, float py) {
+          blob(px, py, w, h, c);
+          blob(px, py, w - 2 * th, h - 2 * th, kBackground);
+        };
+        for (float x : {lx, rx}) {
+          if (pop >= 1) stamp(key(8), (int)(D * 1.05f) + 16, x, kEyeY, ring);
+          else ring(x, kEyeY);
+          disc(x + wob, kEyeY, 15 * pop, c);
+        }
+        break;
+      }
+      case Reaction::WrongPerson: {  // lowered eyes glancing away
+        const float ax = 26 * sinf(t * 2 * kPi * 0.35f);
+        auto lowered = [&](float px, float py, float g) {
+          blob(px, py, D * 0.92f, D * 0.92f, c);
+          g_->fillRect(px - D, py - D, 2 * D, D - D * 0.46f + D * 0.5f * (1 - g), kBackground);
+        };
+        for (float x : {lx, rx}) {
+          const float ex = x + ax, ey = kEyeY + D * 0.1f;
+          if (grow >= 1) stamp(key(9), (int)D + 16, ex, ey, [&](float px, float py) { lowered(px, py, 1); });
+          else lowered(ex, ey, grow);
+        }
+        break;
+      }
+      case Reaction::Sleep:
+      default: {  // closed eyes, breathing, z's
+        const float y = kEyeY + 4 * sinf(t * 2 * kPi * 0.22f);
+        for (float x : {lx, rx}) {
+          if (pop >= 1)
+            stamp(key(10), (int)D + 60, x, y - D * 0.32f,
+                  [&](float px, float py) { stroke(px, py, D * 0.42f, 35, 145, 22, c); });
+          else
+            stroke(x, y - D * 0.32f, D * 0.42f * (0.9f + 0.1f * pop), 35, 145, 22, c);
+        }
+        for (int i = 0; i < 2; ++i) {  // two z's drifting up and fading
+          const float ph = fmodf(t * 0.35f + i * 0.5f, 1.0f);
+          const int q = std::min(31, (int)(ph * 32));  // 32 steps of size + fade
+          const float qp = (q + 0.5f) / 32;
+          const float zx = rx + D * 0.45f + 30 * ph, zy = kEyeY - D * 0.35f - 150 * ph;
+          stamp(key(11, q), 80, zx, zy,
+                [&](float px, float py) { zee(px, py, 26 + 22 * qp, color565(scaled(base, sinf(qp * kPi)))); });
+        }
+        break;
       }
     }
-    frameCanvas_.pushSprite(&M5.Display, 0, 0);
+  }
+
+  // Steady red frame round the face for STOP (drawn by update() when it changes).
+  void drawFrame(Reaction r, uint32_t) {
+    if (r == Reaction::Stop) frameW_ = 14;
+  }
+
+  void stats(uint32_t workUs) {
+    ++frames_;
+    workUs_ += workUs;
+    const uint32_t now = lgfx::millis();
+    if (statMs_ == 0) statMs_ = now;
+    if (now - statMs_ >= 5000) {
+#if defined(ARDUINO)
+      Serial.printf("[face] %.1f fps, %.1f ms per frame (draw %.1f + push %.1f)\n",
+                    frames_ * 1000.0f / (now - statMs_), workUs_ / 1000.0f / frames_, drawUs_ / 1000.0f / frames_,
+                    (workUs_ - drawUs_) / 1000.0f / frames_);
+#endif
+      frames_ = workUs_ = drawUs_ = 0;
+      statMs_ = now;
+    }
   }
 };
 

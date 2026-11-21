@@ -98,8 +98,8 @@ void onPresence(const char* name = nullptr) {
 }
 
 // ---- Screen brightness: dim while asleep -------------------------------------
-constexpr uint8_t kAwakeBrightness = 200;
-constexpr uint8_t kSleepBrightness = 40;
+constexpr uint8_t kAwakeBrightness = 110;  // was 200: the panel ran hot
+constexpr uint8_t kSleepBrightness = 15;
 
 static void updateBrightness() {
   static int shown = -1;
@@ -278,5 +278,5 @@ void loop() {
   updateBrightness();
   ottoFace.update();
   textPanel.update();
-  lgfx::delay(5);
+  lgfx::delay(1);  // the face paces itself at 60 Hz; a longer wait here capped it near 50 fps
 }
