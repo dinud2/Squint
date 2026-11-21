@@ -80,6 +80,46 @@ def test_tracker_needs_agreement():
     assert tr.update("unknown", 0.5) is None       # one blurry frame does not flip it
 
 
+def test_tracker_holds_bottle_through_brief_none():
+    tr = BottleTracker()
+    for i in range(4):
+        tr.update("omega", 0.9, t=i * 0.05)
+    assert tr.current == "omega"
+    t = 0.2
+    for _ in range(20):                    # 1 s of "none": hand is hiding the bottle
+        t += 0.05
+        assert tr.update("none", 0.9, t=t) is None
+    for _ in range(40):                    # keeps saying "none": it really was put down
+        t += 0.05
+        if tr.update("none", 0.9, t=t):
+            break
+    assert tr.current == "none" and t - 0.25 >= tr.none_hold_s
+
+
+def test_intake_done_names_the_bottle_from_intake_start():
+    """Live camera: the bottle verdict drops to "none" while the hand is at the mouth.
+    intake_done must still name the bottle that intake_start named."""
+    import vision_main
+    v = vision_main.Vision(os.path.join(HERE, "no_such_meds.json"), verbose=False)
+    sent = []
+    v.send = sent.append
+    v.embed = lambda crop: crop
+    s = simulate("bottle_to_mouth_slow", np.random.default_rng(3), fps=15)
+    t_c = s["t_contact"]
+    v.gallery.classify = lambda crop: (("omega", 0.9, {}) if crop is not None and crop[0] < t_c - 0.3
+                                       else ("none", 0.9, {}))
+    for t, k in zip(s["t"], s["kps"]):
+        v.step(float(t), kps=k, crop=np.array([float(t)]))
+    rest = s["kps"][0]
+    for i in range(60):                   # hand back down, bottle hidden ("none") for 4 s
+        t = float(s["t"][-1]) + 0.067 * (i + 1)
+        v.step(t, kps=rest, crop=np.array([1e9]))
+    meds = {e["type"]: e.get("med") for e in sent if e["type"].startswith("intake")}
+    assert meds.get("intake_start") == "omega", sent
+    if "intake_done" in meds:
+        assert meds["intake_done"] == "omega", sent
+
+
 def test_bus_roundtrip():
     import bus
     got = []

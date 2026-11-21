@@ -106,19 +106,35 @@ class BottleTracker:
 
     A label must win `need` of the last `window` frames. 'unknown' needs
     the same agreement, so one blurry frame never flips the verdict.
+
+    Letting go is slower than picking up: with a timestamp `t`, dropping from
+    a bottle to "none" also needs "none" on every frame for `none_hold_s`.
+    On the live camera a held bottle is often mostly hidden by the hand (tilted,
+    near the face), and the crop then looks like the empty hand for a second
+    or two. Without the hold the verdict flipped bottle/none several times a
+    second while the bottle never left the hand.
     """
 
-    def __init__(self, window=5, need=4):
+    def __init__(self, window=5, need=4, none_hold_s=2.5):
         self.window, self.need = window, need
+        self.none_hold_s = none_hold_s
         self.hist = []
         self.current = "none"
         self.conf = 0.0
+        self.none_since = None
 
-    def update(self, label, conf):
+    def update(self, label, conf, t=None):
         self.hist = (self.hist + [(label, conf)])[-self.window:]
+        if label != "none":
+            self.none_since = None
+        elif self.none_since is None:
+            self.none_since = t
         labels = [l for l, _ in self.hist]
         for cand in set(labels):
             if labels.count(cand) >= self.need and cand != self.current:
+                if (cand == "none" and t is not None and self.none_since is not None
+                        and t - self.none_since < self.none_hold_s):
+                    continue    # bottle maybe just hidden: wait before saying it was put down
                 self.current = cand
                 self.conf = float(np.mean([c for l, c in self.hist if l == cand]))
                 return self.current, self.conf  # changed

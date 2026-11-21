@@ -56,6 +56,8 @@ class Vision:
         self.last_jpg_t = 0.0
         self.recent_cands = []     # candidate sets from the last 5 frames
         self.person = False
+        self.held_med = "none"     # last bottle seen in hand (survives brief "none" flickers)
+        self.intake_med = None     # bottle named in intake_start, reused for its intake_done
         self.load_meds()
 
     # ---------------- bus handlers
@@ -112,15 +114,29 @@ class Vision:
                 # nobody / no hand in view: there is no bottle in a hand. Feeding "none"
                 # lets the smoother drop a stale "warfarin" within ~4 frames.
                 label, conf = "none", 0.0
-            ch = self.tracker.update(label, conf)
+            # Mid-intake the bottle is tilted and next to the face, so the crop often looks like
+            # an empty hand. The bottle can't have been put down during the reach: ignore "none".
+            if label == "none" and self.intake.state != "idle":
+                label = None
+            ch = self.tracker.update(label, conf, t) if label is not None else None
             if ch:
                 ev = {"type": "bottle_seen", "med": ch[0], "confidence": round(ch[1], 3), "frame_time": t}
                 if ch[0] == "unknown":
                     ev["candidates"] = self.stable_candidates()
                 self.send(ev)
+        if self.tracker.current != "none":
+            self.held_med = self.tracker.current
         armed = self.tracker.current != "none"
         for ev in self.intake.update(t, kps, armed):
-            ev["med"] = self.tracker.current
+            if ev["type"] == "intake_start":
+                # armed may come from the 8 s hold after the verdict went to "none": name the held bottle
+                med = self.tracker.current if self.tracker.current != "none" else self.held_med
+                self.intake_med = med
+            else:
+                # intake_done is about the same dose as its intake_start, whatever is visible now
+                med = self.intake_med if self.intake_med is not None else self.tracker.current
+                self.intake_med = None
+            ev["med"] = med
             ev["frame_time"] = t
             self.send(ev)
         return kps, crop, label
