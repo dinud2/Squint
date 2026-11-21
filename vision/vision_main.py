@@ -118,6 +118,7 @@ class Vision:
             # an empty hand. The bottle can't have been put down during the reach: ignore "none".
             if label == "none" and self.intake.state != "idle":
                 label = None
+                self.tracker.keep()
             ch = self.tracker.update(label, conf, t) if label is not None else None
             if ch:
                 ev = {"type": "bottle_seen", "med": ch[0], "confidence": round(ch[1], 3), "frame_time": t}

@@ -96,6 +96,22 @@ def test_tracker_holds_bottle_through_brief_none():
     assert tr.current == "none" and t - 0.25 >= tr.none_hold_s
 
 
+def test_tracker_one_bottle_frame_does_not_release_none():
+    """Live bug: 4 held-back "none" frames + 1 bottle frame let "none" win with no hold."""
+    tr = BottleTracker()
+    t = 0.0
+    for _ in range(4):
+        t += 0.05
+        tr.update("omega", 0.9, t=t)
+    for _ in range(4):
+        t += 0.05
+        tr.update("none", 0.9, t=t)
+    t += 0.05
+    assert tr.update("omega", 0.9, t=t) is None and tr.current == "omega"
+    t += 0.05
+    assert tr.update("none", 0.9, t=t) is None and tr.current == "omega"
+
+
 def test_intake_done_names_the_bottle_from_intake_start():
     """Live camera: the bottle verdict drops to "none" while the hand is at the mouth.
     intake_done must still name the bottle that intake_start named."""

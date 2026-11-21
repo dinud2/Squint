@@ -132,10 +132,16 @@ class BottleTracker:
         labels = [l for l, _ in self.hist]
         for cand in set(labels):
             if labels.count(cand) >= self.need and cand != self.current:
-                if (cand == "none" and t is not None and self.none_since is not None
-                        and t - self.none_since < self.none_hold_s):
+                # none_since is None here when this very frame saw a bottle: that is not
+                # "put down" either, however many "none" frames are still in the window
+                if (cand == "none" and t is not None
+                        and (self.none_since is None or t - self.none_since < self.none_hold_s)):
                     continue    # bottle maybe just hidden: wait before saying it was put down
                 self.current = cand
                 self.conf = float(np.mean([c for l, c in self.hist if l == cand]))
                 return self.current, self.conf  # changed
         return None
+
+    def keep(self):
+        """The bottle is known to still be in hand (e.g. mid-intake): restart the none hold."""
+        self.none_since = None
