@@ -6,13 +6,19 @@
                      Starts with the current state so a client never misses who is there.
     GET /health   -> {"ok": true, "camera_age_s": ...}
 
+    POST /tab5/frame, /bottles/enroll?name=, /bottles/reset?name=, GET /bottles
+                  -> bottle recognition for the Tab5 camera, see buddy/bottle_service.py
+
 Events (all have "type" and "time"):
-    people_present  {"people": [...], "unknown": n, "seq": n}
+    people_present   {"people": [...], "unknown": n, "seq": n}
+    bottle_picked    {"bottle": "tylenol", "how": "lifted"|"gone"}
+    bottle_returned  {"bottle": "tylenol"}
 """
 import json
 import queue
 import threading
 import time
+from urllib.parse import parse_qs, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
@@ -53,7 +59,7 @@ class Hub:
                 self.subscribers.remove(q)
 
 
-def make_handler(hub):
+def make_handler(hub, bottles=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -73,6 +79,8 @@ def make_handler(hub):
                     s = dict(hub.state)
                 s["time"] = time.time()
                 self._json(s)
+            elif self.path.startswith("/bottles") and bottles is not None:
+                self._json(bottles.info())
             elif self.path.startswith("/health"):
                 age = time.time() - hub.last_frame_t if hub.last_frame_t else None
                 self._json({"ok": age is not None and age < 5, "camera_age_s": age})
@@ -96,12 +104,33 @@ def make_handler(hub):
                 finally:
                     hub.unsubscribe(q)
             else:
-                self._json({"error": "not found", "endpoints": ["/state", "/events", "/health"]}, 404)
+                self._json({"error": "not found", "endpoints": ["/state", "/events", "/health", "/bottles"]}, 404)
+
+        def do_POST(self):
+            if bottles is None:
+                return self._json({"error": "bottle recognition is not running"}, 503)
+            u = urlparse(self.path)
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            n = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(n) if n else b""
+            try:
+                if u.path == "/tab5/frame":
+                    self._json(bottles.frame(body))
+                elif u.path == "/bottles/enroll" and q.get("name"):
+                    r = bottles.enroll(q["name"], body)
+                    self._json(r, 400 if "error" in r else 200)
+                elif u.path == "/bottles/reset" and q.get("name"):
+                    self._json(bottles.reset(q["name"]))
+                else:
+                    self._json({"error": "not found",
+                                "endpoints": ["/tab5/frame", "/bottles/enroll?name=", "/bottles/reset?name="]}, 404)
+            except Exception as e:          # never take the server down on one bad request
+                self._json({"error": repr(e)}, 500)
     return Handler
 
 
-def serve(hub, port=8081):
-    srv = ThreadingHTTPServer(("0.0.0.0", port), make_handler(hub))
+def serve(hub, port=8081, bottles=None):
+    srv = ThreadingHTTPServer(("0.0.0.0", port), make_handler(hub, bottles))
     srv.daemon_threads = True
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv

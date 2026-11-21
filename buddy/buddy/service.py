@@ -3,12 +3,13 @@
     python3 -m buddy.service                                   # on the Pi (camera on localhost)
     python3 -m buddy.service --source http://<pi>:8080/stream  # on a laptop
 
-API on port 8081: see buddy/api.py.
+API on port 8081 (people + Tab5 bottles): see buddy/api.py.
 """
 import argparse
 import time
 
 from .api import Hub, serve
+from .bottle_service import BottleService
 from .camera import Camera
 from .faces import FaceID
 from .presence import Presence
@@ -20,12 +21,18 @@ def main():
     ap.add_argument("--port", type=int, default=8081)
     ap.add_argument("--det-scale", type=float, default=0.5, help="detect faces on a smaller frame (faster)")
     ap.add_argument("--verbose", action="store_true", help="print every frame's result")
+    ap.add_argument("--no-faces", action="store_true", help="bottle API only (no counter camera)")
     a = ap.parse_args()
 
     hub, presence = Hub(), Presence()
+    bottles = BottleService(hub)
+    serve(hub, a.port, bottles)
+    print(f"[buddy] bottles {bottles.info()['bottles']}; API on :{a.port}", flush=True)
+    if a.no_faces:
+        while True:
+            time.sleep(3600)
     fid = FaceID(det_scale=a.det_scale)
-    serve(hub, a.port)
-    print(f"[buddy] enrolled {sorted(fid.people)}; API on :{a.port} (/state /events /health)", flush=True)
+    print(f"[buddy] faces enrolled {sorted(fid.people)}", flush=True)
     cam = Camera(a.source)
     while True:
         try:
