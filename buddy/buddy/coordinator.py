@@ -80,8 +80,10 @@ class Coordinator:
                 req = urllib.request.Request(self.announce_url, data=json.dumps({"text": text}).encode(),
                                              headers={"Content-Type": "application/json"})
                 urllib.request.urlopen(req, timeout=10).read()
+                self.hub.diag.announced(True)
             except Exception as e:
                 print("[say] announce failed:", e, flush=True)
+                self.hub.diag.announced(False, e)
         threading.Thread(target=go, daemon=True).start()
 
     def show(self, line):

@@ -56,8 +56,24 @@ inline long parse(const String& body, long seq) {
   return seq;
 }
 
+// A line for the UI that comes from the Tab5 itself, not the Pi ("offline ..." / "online").
+inline void local(const char* text) {
+  char line[kLineLen];
+  strncpy(line, text, kLineLen - 1);
+  line[kLineLen - 1] = '\0';
+  xQueueSend(queue(), line, 0);
+}
+
+// Say on screen why nothing is happening, instead of sleeping forever: after 15 s without
+// Wi-Fi, or 3 failed requests to the Pi in a row. Cleared by the next good answer.
+constexpr uint32_t kNoWifiMs = 15000;
+constexpr int kFailsBeforeShowing = 3;
+
 inline void task(void*) {
 #ifndef SQUINT_NO_SECRETS
+  bool shownOffline = false;
+  int fails = 0;
+  uint32_t wifiLostMs = millis();
   WiFi.setPins(kSdioClk, kSdioCmd, kSdioD0, kSdioD1, kSdioD2, kSdioD3, kC6Reset);
   WiFi.mode(WIFI_STA);
   vTaskDelay(pdMS_TO_TICKS(1500));  // let USB serial attach so the scan below is visible
@@ -71,7 +87,12 @@ inline void task(void*) {
   uint32_t lastReport = 0;
   for (;;) {
     if (WiFi.status() != WL_CONNECTED) {
+      if (online()) wifiLostMs = millis();
       online() = false;
+      if (!shownOffline && millis() - wifiLostMs > kNoWifiMs) {
+        local("offline No Wi-Fi|Looking for " SQUINT_WIFI_SSID);
+        shownOffline = true;
+      }
       if (millis() - lastReport > 5000) {
         lastReport = millis();
         Serial.printf("[pilink] waiting for wifi \"%s\", status %d\n", SQUINT_WIFI_SSID, (int)WiFi.status());
@@ -88,6 +109,11 @@ inline void task(void*) {
     http.setTimeout(25000);
     int code = http.GET();
     if (code == 200) {
+      fails = 0;
+      if (shownOffline) {
+        local("online");
+        shownOffline = false;
+      }
       String body = http.getString();
       if (seq < 0) {
         int s = body.indexOf("\"seq\"");
@@ -106,6 +132,10 @@ inline void task(void*) {
       }
     } else {
       Serial.printf("[pilink] GET failed: %d\n", code);
+      if (++fails >= kFailsBeforeShowing && !shownOffline) {
+        local("offline Can't reach Squint|Pi " SQUINT_PI_HOST ":8081 (secrets.h)");
+        shownOffline = true;
+      }
       vTaskDelay(pdMS_TO_TICKS(1000));
     }
     http.end();

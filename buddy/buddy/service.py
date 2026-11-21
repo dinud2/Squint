@@ -53,6 +53,7 @@ def face_loop(src, hub, det_scale, verbose):
     presence = Presence()
     fid = FaceID(det_scale=det_scale)
     print(f"[buddy] faces from {src}, enrolled {sorted(fid.people)}", flush=True)
+    hub.diag.faces["source"] = src
     cam = Frames(src, "face")
     while True:
         t, frame = cam.read()
@@ -62,7 +63,10 @@ def face_loop(src, hub, det_scale, verbose):
             seen = fid.identify_all(frame)
         except Exception as e:                  # one bad frame must not stop Squint seeing people
             print("[buddy] face frame skipped:", e, flush=True)
+            hub.diag.error("face", e)
             continue
+        hub.diag.faces["enrolled"] = sorted(fid.people)
+        hub.diag.face_frame(t, frame.shape, fid.last_raw, len(seen), seen)
         names = [n for _, n, _, _ in seen if n != "unknown"]
         unknown = sum(n == "unknown" for _, n, _, _ in seen)
         if verbose:
@@ -74,6 +78,7 @@ def face_loop(src, hub, det_scale, verbose):
 
 def bottle_loop(src, hub, bottles, fps, verbose):
     print(f"[buddy] bottles from {src} at {fps} fps, enrolled {sorted(bottles.info()['bottles'])}", flush=True)
+    hub.diag.bottles.update(source=src, mode=bottles.mode)
     cam = Frames(src, "bottle")
     period = 1.0 / fps
     while True:
@@ -84,7 +89,10 @@ def bottle_loop(src, hub, bottles, fps, verbose):
             r = bottles.frame_image(frame)
         except Exception as e:
             print("[buddy] bottle frame skipped:", e, flush=True)
+            hub.diag.error("bottle", e)
             continue
+        hub.diag.bottles["enrolled"] = sorted(bottles.info()["bottles"])
+        hub.diag.bottle_frame(t, r)
         if verbose:
             print(f"[bottles] {[(b['name'], b['score']) for b in r['bottles']]} on counter {r['on_counter']} "
                   f"{r['ms']} ms", flush=True)
@@ -108,6 +116,7 @@ def main():
 
     hub = Hub()
     bottles = BottleService(hub, a.bottle_mode)
+    hub.diag.voice["url"] = a.announce
     coord = Coordinator(hub, Store(), a.announce, journal=Journal())
     serve(hub, a.port, bottles, coord)
     print(f"[buddy] API on :{a.port}", flush=True)

@@ -134,7 +134,9 @@ It then polls the Pi on its own.
 
 *Test voice* should speak on the Google Home. The widget and Siri follow the app's settings.
 
-**5. Walk up to the camera.** Squint's face changes on the Tab5 and in the app, and the Google Home
+**5. Check it.** `python3 buddy/tools/doctor.py` lists anything that's wrong and how to fix it.
+
+**6. Walk up to the camera.** Squint's face changes on the Tab5 and in the app, and the Google Home
 greets you by name.
 
 For the Trends tab to have something to show on a fresh station, stop the service and seed a few

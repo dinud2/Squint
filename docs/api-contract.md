@@ -79,7 +79,7 @@ DayPoint      { "date": "2026-11-20", "scheduled": 3, "taken": 3, "late_min": 52
 | POST | `/intake` | `{"person", "confidence"}` | fake a hand-to-mouth reading (testing, until it is built) |
 | GET | `/state` | | who is at the counter now: `{"people": [...], "unknown": n, "since", "seq"}` |
 | GET | `/events` | | Server-Sent Events, one `data: {json}` per event (`people_present`, `intake`, ...) |
-| GET | `/health` | | `{"ok", "camera_age_s"}` |
+| GET | `/health` | | `{"ok", "camera_age_s", "warnings": [...], "faces", "bottles", "voice", "clients", "uptime_s"}`: what each part last did, see `buddy/buddy/diag.py` |
 | GET | `/cams` | | web page with the camera stream |
 | GET | `/bottles` | | enrolled bottles |
 | POST | `/bottles/enroll?name=`, `/bottles/reset?name=` | JPEG | enrol or clear a bottle (used by `tools/enroll_bottle.py`) |

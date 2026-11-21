@@ -55,10 +55,41 @@ buddy/
   bottles.py         bottle recognition by embedding similarity
   bottle_service.py  / bottle_tracker.py   steady bottle decisions from the live camera
   detector.py, camera.py   object detection, and reading an MJPEG stream (newest frame only)
+  diag.py            what each part last did, and plain-English warnings, for GET /health
 models/              the ONNX models the Pi runs (committed: the Pi can't regenerate them)
-tools/               enrolment and live-check scripts (below), and seed_history.py
+tools/               enrolment and live-check scripts (below), seed_history.py, and doctor.py
 data/                personal data, git-ignored: faces, bottle photos, store.json, journal.jsonl
 ```
+
+## Is it working?
+
+Run this on the laptop while the Pi is on the same network. It finds the Pi on the phone hotspot:
+
+```bash
+python3 tools/doctor.py                  # or: --pi 172.20.10.3
+```
+
+It checks the following, then lists what to fix:
+- the camera stream
+- what the face and bottle loops last saw, and where the face was in the picture
+- whether announcements reach the laptop, and whether that's really this laptop's address
+- whether the Tab5 and the app are asking the Pi for commands
+
+The same facts are in `GET /health` under `warnings`. Its typical findings:
+
+| Warning | Usually means |
+|---|---|
+| The Tab5 has never asked for commands | `SQUINT_PI_HOST` in `tab5-face/secrets.h` is an old address: reflash |
+| The face is at the edge of the picture | aim the camera so faces sit in the middle |
+| No face seen for over 60 s | the camera points above or beside where people stand |
+| Someone is in view but not recognised | only enrolled people are greeted, by design |
+| No `_other` bottle class | heads and hands can score close to a bottle: enrol `_other` |
+| The last announcement failed | `home/server.py` isn't running, or the laptop's address changed |
+
+To watch every frame's decision, start the service with `--verbose` (on the Pi:
+`SQUINT_ARGS="--verbose --announce ..." ./squint_start.sh`, then `tail -f ~/buddy/service.log`).
+Greetings are spoken at most once per person every 2 minutes, so a quick second walk-up only wakes
+the face.
 
 ## Enrol people and bottles
 
