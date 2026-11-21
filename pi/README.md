@@ -1,14 +1,11 @@
 # Pi camera stream
 
-Streams the Raspberry Pi 5's USB cameras (QNX 8) as MJPEG over HTTP. Squint uses two:
+Streams the Raspberry Pi 5's USB camera (QNX 8) as MJPEG over HTTP. Squint uses **one Logitech C270**
+(QNX unit 5) on `:8080`, tilted up at the person: the backend finds both faces and the bottle held up
+to it in that one stream.
 
-| Port | Camera | QNX unit | Points | Used for |
-|---|---|---|---|---|
-| `:8080` | Logitech Brio 101 | 8 | down at the counter | bottles |
-| `:8082` | Logitech C270 | 5 | up at the person | faces |
-
-**After a reboot, run `./squint_start.sh`.** It starts both streams and the backend (`buddy/`), and
-restarts QNX's camera service if a camera went missing. The rest of this page is about one stream.
+**After a reboot, run `./squint_start.sh`.** It starts the stream and the backend (`buddy/`), and
+restarts QNX's camera service if the camera went missing.
 
 ## Build and run (on the Pi)
 
@@ -46,7 +43,7 @@ process can hold the camera.
 
 - **Run it at a fixed, high priority** so the camera can't be starved by recognition work:
   `on -p 20 ./camstream 5 8080 > camstream.log 2>&1 &`
-- **Ports 8080 and 8082 belong to the cameras.** Recognition reads `http://localhost:8080/stream` on
+- **Port 8080 belongs to the camera.** Recognition reads `http://localhost:8080/stream` on
   the Pi, or `http://<pi-ip>:8080/stream` from a laptop.
 - **If the camera stalls, the stream goes quiet.** Consumers should treat no frames for a few
   seconds as "camera down", never reuse an old frame.
@@ -57,12 +54,11 @@ The device sits on a counter with the camera tilted up at people standing in fro
 The C270 is fairly narrow (~55° diagonal), so people need to be roughly 0.6–1.2 m away for the
 face and the hand holding a bottle to both be in view.
 
-## Two cameras (Squint)
+## The camera config (and the old second camera)
 
-| Port | Camera | QNX unit | Points | Used for |
-|---|---|---|---|---|
-| 8080 | Logitech Brio 101 | 8 | down at the counter | bottle detection (1280×720 @ 5 fps; ≤ 5 fps at any size uncompressed over USB 2) |
-| 8082 | Logitech C270 | 5 | up at the person | faces (960×544 @ 20 fps) |
+Squint used to have a second camera, a Brio 101 on `:8082` pointing down at the bottles. It was
+dropped: over USB 2 it managed at most 5 fps, and one C270 at 960×544 @ 20 fps sees both the face
+and the bottle being held up. The QNX config change below is still on the Pi and does no harm.
 
 QNX's camera service only had one USB camera entry (unit 5, matching *any* USB camera), so
 `/usr/etc/config/sensor/sensor_rpi5.conf` was changed (original kept as `sensor_rpi5.conf.bak-squint`):
@@ -74,4 +70,4 @@ sudo pidin arg | grep "sensor -U"        # note the pid, then: sudo kill <pid>
 sudo sh -c "nohup sensor -U 521:521 -b external -r /data/share/sensor -c /etc/config/sensor/sensor_rpi5.conf > /dev/null 2>&1 &"
 ```
 
-After a reboot, `./squint_start.sh` (copy in `pi/squint_start.sh`) starts both streams and the service.
+After a reboot, `./squint_start.sh` (copy in `pi/squint_start.sh`) starts the stream and the service.
