@@ -49,3 +49,22 @@ process can hold the camera.
 The device sits on a counter with the camera tilted up at people standing in front of it.
 The C270 is fairly narrow (~55° diagonal), so people need to be roughly 0.6–1.2 m away for the
 face and the hand holding a bottle to both be in view.
+
+## Two cameras (Squint)
+
+| Port | Camera | QNX unit | Points | Used for |
+|---|---|---|---|---|
+| 8080 | Logitech Brio 101 | 8 | down at the counter | bottle detection (1280×720 @ 5 fps; ≤ 5 fps at any size uncompressed over USB 2) |
+| 8082 | Logitech C270 | 5 | up at the person | faces (960×544 @ 20 fps) |
+
+QNX's camera service only had one USB camera entry (unit 5, matching *any* USB camera), so
+`/usr/etc/config/sensor/sensor_rpi5.conf` was changed (original kept as `sensor_rpi5.conf.bak-squint`):
+unit 5 is pinned to the C270 (`0x046d, 0x0825`) and a unit 8 was added for the Brio 101
+(`0x046d, 0x094d`). Restart the camera service after editing it (it only shows up for root):
+
+```sh
+sudo pidin arg | grep "sensor -U"        # note the pid, then: sudo kill <pid>
+sudo sh -c "nohup sensor -U 521:521 -b external -r /data/share/sensor -c /etc/config/sensor/sensor_rpi5.conf > /dev/null 2>&1 &"
+```
+
+After a reboot, `./squint_start.sh` (copy in `pi/squint_start.sh`) starts both streams and the service.
