@@ -85,13 +85,24 @@ class Gallery:
         if os.path.isdir(self.dir):
             for fn in sorted(os.listdir(self.dir)):
                 if fn.endswith(".npy"):
-                    self.items[fn[:-4]] = np.load(os.path.join(self.dir, fn))
+                    g = self._valid(np.load(os.path.join(self.dir, fn)))
+                    if len(g):
+                        self.items[fn[:-4]] = g
         self._recenter()
 
+    @staticmethod
+    def _valid(e):
+        """Drop NaN / zero rows: one NaN row made the shared mean NaN and every score NaN
+        (some augmented close-ups produced NaN embeddings on the Pi)."""
+        e = np.asarray(e, np.float32).reshape(-1, np.asarray(e).shape[-1])
+        return e[np.all(np.isfinite(e), axis=1) & np.any(e != 0, axis=1)]
+
     def add(self, name, embeddings, save=True, append=False):
-        e = np.asarray(embeddings, np.float32)
+        e = self._valid(embeddings)
         if append and name in self.items:
             e = np.concatenate([self.items[name], e])
+        if not len(e):
+            return
         self.items[name] = e
         self._recenter()
         if save:
