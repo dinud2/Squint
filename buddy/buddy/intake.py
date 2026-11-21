@@ -10,8 +10,8 @@ Runs on the same camera frames as face recognition, but only while a dose is wai
   at mouth: a palm box within NEAR face widths of the mouth point (0 if the box covers it).
 
 Result, once per waiting dose (event "intake" -> coordinator.on_intake):
-  3+ "at mouth" frames with a confident palm (>= PALM_SURE)  -> confidence 0.95: auto-confirm
-  1-2 frames (or less sure palms)                              -> confidence 0.75: Tab5 asks
+  2+ "at mouth" frames, at least one confident palm (>= PALM_SURE) -> 0.95: auto-confirm
+  1 frame, or only unsure palms                                    -> 0.75: Tab5 asks
 """
 import os
 import time
@@ -25,7 +25,9 @@ MODEL = os.path.join(HERE, "models", "palm_detection_mediapipe_2023feb.onnx")
 
 NEAR = 0.25          # face widths between the palm box and the mouth point
 PALM_SURE = 0.70
-SURE_FRAMES = 3      # -> 0.95 (auto-confirm)
+SURE_FRAMES = 2      # at-mouth frames -> 0.95 (auto-confirm), if at least one palm is >= PALM_SURE
+# (the Pi checks ~2 frames/s while a dose waits, so a ~1 s hand-to-mouth gives about 2 frames;
+#  the first live test gave 2 frames / 1 confident palm and was held at 0.75 by a 3-frame rule)
 MOUTH_KEEP_S = 1.2   # the hand hides the face: keep the last mouth position this long
 SETTLE_S = 1.2       # report this long after the last 'at mouth' frame (the hand may stay there)
 
@@ -71,7 +73,7 @@ class HandToMouth:
         # Report first: the hand may still hide the face (mouth position too old) by then.
         if self.hits and t - self.last_hit_t >= SETTLE_S:
             sure = sum(s >= PALM_SURE for s in self.hits)
-            conf = 0.95 if sure >= SURE_FRAMES else 0.75
+            conf = 0.95 if len(self.hits) >= SURE_FRAMES and sure >= 1 else 0.75
             self.reported = True
             return {"type": "intake", "person": pending["for"], "confidence": conf,
                     "frames": len(self.hits), "sure_frames": sure}
