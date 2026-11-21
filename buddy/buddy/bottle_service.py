@@ -40,9 +40,9 @@ def center_crop(img, box=CENTER):
 
 
 class ShowTracker:
-    """bottle_shown once the same bottle is recognised in NEED frames in a row; the same bottle
+    """bottle_shown once the same bottle is recognised in NEED (3) checks in a row; the same bottle
     can only be shown again after it has been out of view for CLEAR_S."""
-    NEED = 2
+    NEED = 3      # ~0.75 s at 4 checks/s; stray one-frame guesses (e.g. "motrin" on an empty view) never get through
     CLEAR_S = 1.5
 
     def __init__(self):
