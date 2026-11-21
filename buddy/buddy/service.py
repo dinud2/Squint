@@ -24,20 +24,45 @@ from .presence import Presence
 from .store import Store
 
 
+class Frames:
+    """A camera that never ends the loop that reads it: a lost stream, a JPEG that won't decode,
+    a webcam hiccup or the end of a test clip just mean "no frame yet". A clip starts over."""
+
+    def __init__(self, src, label):
+        self.src, self.label = src, label
+        self.cam = Camera(src)
+        self.is_file = not src.startswith(("http://", "https://")) and not src.isdigit()
+
+    def read(self):
+        """-> (timestamp, BGR frame), blocking until there is one."""
+        while True:
+            try:
+                t, frame = self.cam.read()
+            except TimeoutError as e:
+                print(f"[buddy] {self.label} camera:", e, flush=True)
+                continue
+            if frame is not None and frame.size:
+                return t, frame
+            if self.is_file:                                     # end of the clip: play it again
+                self.cam.close()
+                self.cam = Camera(self.src)
+            time.sleep(0.05)
+
+
 def face_loop(src, hub, det_scale, verbose):
     presence = Presence()
     fid = FaceID(det_scale=det_scale)
     print(f"[buddy] faces from {src}, enrolled {sorted(fid.people)}", flush=True)
-    cam = Camera(src)
+    cam = Frames(src, "face")
     while True:
-        try:
-            t, frame = cam.read()
-        except TimeoutError as e:
-            print("[buddy] face camera:", e, flush=True)
-            continue
+        t, frame = cam.read()
         hub.last_frame_t = t
         t0 = time.time()
-        seen = fid.identify_all(frame)
+        try:
+            seen = fid.identify_all(frame)
+        except Exception as e:                  # one bad frame must not stop Squint seeing people
+            print("[buddy] face frame skipped:", e, flush=True)
+            continue
         names = [n for _, n, _, _ in seen if n != "unknown"]
         unknown = sum(n == "unknown" for _, n, _, _ in seen)
         if verbose:
@@ -49,17 +74,17 @@ def face_loop(src, hub, det_scale, verbose):
 
 def bottle_loop(src, hub, bottles, fps, verbose):
     print(f"[buddy] bottles from {src} at {fps} fps, enrolled {sorted(bottles.info()['bottles'])}", flush=True)
-    cam = Camera(src)
+    cam = Frames(src, "bottle")
     period = 1.0 / fps
     while True:
         t0 = time.time()
-        try:
-            t, frame = cam.read()          # always the newest frame
-        except TimeoutError as e:
-            print("[buddy] bottle camera:", e, flush=True)
-            continue
+        t, frame = cam.read()                   # always the newest frame
         hub.last_frame_t = t
-        r = bottles.frame_image(frame)
+        try:
+            r = bottles.frame_image(frame)
+        except Exception as e:
+            print("[buddy] bottle frame skipped:", e, flush=True)
+            continue
         if verbose:
             print(f"[bottles] {[(b['name'], b['score']) for b in r['bottles']]} on counter {r['on_counter']} "
                   f"{r['ms']} ms", flush=True)
