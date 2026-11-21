@@ -1,8 +1,8 @@
-// tab5-face.ino - Otto-eyes companion face for an upright M5Stack Tab5.
+// tab5-face.ino - Otto-eyes companion face for a landscape M5Stack Tab5 (the C270 sits on top).
 //
-// Screen (720 x 1280, portrait):
-//   - Face zone (top 600 px): animated Otto eye GIFs, coloured per reaction.
-//   - Text zone (below): a few big words in the middle of the body.
+// Screen (1280 x 720, landscape):
+//   - Face zone (top 440 px): eyes drawn in code at up to 60 Hz, coloured per reaction.
+//   - Text zone (below): a few big words.
 //
 // Sleep and wake:
 //   - It sleeps by default (closed eyes, dim screen).
@@ -247,7 +247,9 @@ void setup() {
 #if defined(ARDUINO)
   Serial.begin(115200);
 #endif
-  // Upright (portrait). If the face is upside down in the body, use rotation 2.
+  // The screen is used in landscape (the C270 sits on top), but the display is kept in its
+  // native portrait rotation, which is ~2x faster to push; the face and text are drawn
+  // rotated (OttoFace.h). If the picture is upside down, set face::kFlip = true.
   if (M5.Display.width() > M5.Display.height()) M5.Display.setRotation(M5.Display.getRotation() ^ 1);
   M5.Display.fillScreen(face::kBackground);
   voice::begin();

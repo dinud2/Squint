@@ -27,13 +27,24 @@
 
 namespace face {
 
-// ---- Layout (screen pixels, portrait 720 x 1280) ---------------------------
-constexpr int kWidth = 720;
-constexpr int kFaceBottom = 600;  // Face zone is y 0 .. 600 (text panel below).
-constexpr float kEyeSize = 210.0f;     // Eye diameter (the GIF eyes were ~185 px).
-constexpr float kEyeGap = 330.0f;      // Distance between eye centres.
-constexpr float kEyeY = 300.0f;        // Eye centre height.
+// ---- Layout (screen pixels, landscape 1280 x 720; the C270 sits on top) -----
+constexpr int kWidth = 1280;
+constexpr int kHeight = 720;
+constexpr int kFaceBottom = 440;  // Face zone is y 0 .. 440 (text panel below).
+constexpr float kEyeSize = 240.0f;     // Eye diameter.
+constexpr float kEyeGap = 430.0f;      // Distance between eye centres.
+constexpr float kEyeY = 225.0f;        // Eye centre height.
 constexpr uint32_t kFrameUs = 16667;   // 60 Hz.
+
+// The panel is portrait in memory (720 x 1280). Pushing in a landscape rotation made M5GFX
+// transpose every pixel (~15 ms per frame), so the display stays in its native portrait
+// rotation and the face is drawn already rotated: every shape helper maps landscape
+// (logical) points to portrait (physical) ones with T(). Set kFlip if it shows upside down.
+constexpr bool kFlip = false;
+constexpr int kPanelW = 720;                    // physical (portrait) width
+constexpr int kCanvasW = kFaceBottom;           // face canvas, physical: 440 x 1280
+constexpr int kCanvasH = kWidth;
+constexpr int kCanvasX = kFlip ? 0 : kPanelW - kFaceBottom;  // physical x of the face canvas
 
 // ---- Colours ---------------------------------------------------------------
 struct Rgb {
@@ -80,7 +91,7 @@ class OttoFace {
   bool begin() {
     canvas_.setPsram(true);
     canvas_.setColorDepth(16);
-    if (!canvas_.createSprite(kWidth, kFaceBottom)) return false;
+    if (!canvas_.createSprite(kCanvasW, kCanvasH)) return false;
     // Pre-render the hearts: anti-aliased circles are costly, copying a sprite is not.
     for (int i = 0; i < kHeartSteps; ++i) {
       const float sz = kEyeSize * 1.08f * (1 + 0.07f * i / (kHeartSteps - 1));
@@ -131,7 +142,7 @@ class OttoFace {
     draw(dt);
     const uint32_t t1 = lgfx::micros();
     const Box l = unite(prevInk_[0], ink_[0]), r = unite(prevInk_[1], ink_[1]);
-    if (!l.empty() && !r.empty() && r.x0 <= l.x1) {
+    if (!l.empty() && !r.empty() && l.x0 <= r.x1 && r.x0 <= l.x1 && l.y0 <= r.y1 && r.y0 <= l.y1) {
       push(unite(l, r));  // they overlap: one push
     } else {
       push(l);
@@ -178,38 +189,62 @@ class OttoFace {
     if (b.empty()) return a;
     return {std::min(a.x0, b.x0), std::min(a.y0, b.y0), std::max(a.x1, b.x1), std::max(a.y1, b.y1)};
   }
+  // ---- landscape (logical) -> portrait (physical) mapping, for the current target g_
+  struct Pt {
+    float x, y;
+  };
+  Pt T(float X, float Y) const {
+    const int W = g_->width(), H = g_->height();
+    return kFlip ? Pt{Y, H - 1 - X} : Pt{W - 1 - Y, X};
+  }
+  static int bucket(float x) { return x < kWidth / 2 ? 0 : 1; }  // left / right eye
+  // Logical box -> physical ink box.
   void mark(float x0, float y0, float x1, float y1) {
+    const Pt a = T(x0, y0), b = T(x1, y1);
+    markPhys(bucket((x0 + x1) / 2), std::min(a.x, b.x), std::min(a.y, b.y), std::max(a.x, b.x), std::max(a.y, b.y));
+  }
+  void markPhys(int i, float x0, float y0, float x1, float y1) {
     const int m = 3;  // anti-aliasing fringe
-    Box& b = ink_[(x0 + x1) / 2 < kWidth / 2 ? 0 : 1];
-    b = unite(b, Box{std::max(0, (int)x0 - m), std::max(0, (int)y0 - m),
-                     std::min(kWidth - 1, (int)x1 + m), std::min(kFaceBottom - 1, (int)y1 + m)});
+    ink_[i] = unite(ink_[i], Box{std::max(0, (int)x0 - m), std::max(0, (int)y0 - m),
+                                 std::min((int)g_->width() - 1, (int)x1 + m), std::min((int)g_->height() - 1, (int)y1 + m)});
+  }
+  void fillRectL(float X, float Y, float w, float h, uint16_t c) {  // logical rect
+    const Pt a = T(X, Y), b = T(X + w, Y + h);
+    g_->fillRect((int)std::min(a.x, b.x), (int)std::min(a.y, b.y), (int)fabsf(b.x - a.x) + 1, (int)fabsf(b.y - a.y) + 1, c);
   }
   void fill(const Box& b, uint16_t c) {
     if (!b.empty()) g_->fillRect(b.x0, b.y0, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1, c);
   }
   void push(const Box& b) {
     if (b.empty()) return;
-    M5.Display.setClipRect(b.x0, b.y0, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1);
-    canvas_.pushSprite(&M5.Display, 0, 0);
+    M5.Display.setClipRect(kCanvasX + b.x0, b.y0, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1);
+    canvas_.pushSprite(&M5.Display, kCanvasX, 0);
     M5.Display.clearClipRect();
   }
   // STOP frame strips (top, bottom, left, right) of width w.
+  // (physical canvas coordinates: the frame goes round the whole face canvas)
+  static constexpr int kFrameR = 40, kCorner = 44;
+  // Clear the whole band the frame can reach, corners included (clearing only w px used
+  // to leave little red corner triangles on screen after STOP).
   void clearStrips(int w) {
-    g_->fillRect(0, 0, kWidth, w, kBackground);
-    g_->fillRect(0, kFaceBottom - w, kWidth, w, kBackground);
-    g_->fillRect(0, 0, w, kFaceBottom, kBackground);
-    g_->fillRect(kWidth - w, 0, w, kFaceBottom, kBackground);
+    const int e = std::max(w, kCorner);
+    g_->fillRect(0, 0, kCanvasW, e, kBackground);
+    g_->fillRect(0, kCanvasH - e, kCanvasW, e, kBackground);
+    g_->fillRect(0, 0, e, kCanvasH, kBackground);
+    g_->fillRect(kCanvasW - e, 0, e, kCanvasH, kBackground);
   }
+  // One clean anti-aliased ring (stacked round rects left jagged bits in the corners).
   void drawStrips(int w) {
-    const uint16_t red = color565(kRed);
-    for (int i = 0; i < w; ++i) g_->drawRoundRect(i, i, kWidth - 2 * i, kFaceBottom - 2 * i, 40, red);
+    g_->fillSmoothRoundRect(0, 0, kCanvasW, kCanvasH, kFrameR, color565(kRed));
+    g_->fillSmoothRoundRect(w, w, kCanvasW - 2 * w, kCanvasH - 2 * w, std::max(4, kFrameR - w), kBackground);
+    prevInk_[0] = prevInk_[1] = Box{0, 0, kCanvasW - 1, kCanvasH - 1};  // the inside was cleared: redraw it all next frame
   }
   void pushStrips(int w) {
-    const int corner = 44;  // rounded corners reach a little further in
-    push(Box{0, 0, kWidth - 1, std::max(w, corner)});
-    push(Box{0, kFaceBottom - 1 - std::max(w, corner), kWidth - 1, kFaceBottom - 1});
-    push(Box{0, 0, w, kFaceBottom - 1});
-    push(Box{kWidth - 1 - w, 0, kWidth - 1, kFaceBottom - 1});
+    const int e = std::max(w, kCorner);  // rounded corners reach a little further in
+    push(Box{0, 0, kCanvasW - 1, e});
+    push(Box{0, kCanvasH - 1 - e, kCanvasW - 1, kCanvasH - 1});
+    push(Box{0, 0, e, kCanvasH - 1});
+    push(Box{kCanvasW - 1 - e, 0, kCanvasW - 1, kCanvasH - 1});
   }
 
   static constexpr uint32_t kCloseMs = 110, kOpenMs = 170;  // expression change = a blink
@@ -247,6 +282,7 @@ class OttoFace {
       ink_[0] = ink_[1] = Box{};
       g_ = &scratch;
       render(size / 2.0f, size / 2.0f);
+      const Pt anchor = T(size / 2.0f, size / 2.0f);  // where the logical centre landed
       g_ = &canvas_;
       Box tb = unite(ink_[0], ink_[1]);
       ink_[0] = keep[0];
@@ -260,13 +296,14 @@ class OttoFace {
       if (!spr->createSprite(tb.x1 - tb.x0 + 1, tb.y1 - tb.y0 + 1)) { delete spr; render(x, y); return; }
       scratch.pushSprite(spr, -tb.x0, -tb.y0);
       scratch.deleteSprite();
-      stamps_[nStamps_] = {key, spr, size / 2 - tb.x0, size / 2 - tb.y0};
+      stamps_[nStamps_] = {key, spr, (int)lroundf(anchor.x) - tb.x0, (int)lroundf(anchor.y) - tb.y0};
       st = &stamps_[nStamps_++];
     }
-    const int px = (int)lroundf(x) - st->ax, py = (int)lroundf(y) - st->ay;
+    const Pt P = T(x, y);
+    const int px = (int)lroundf(P.x) - st->ax, py = (int)lroundf(P.y) - st->ay;
     // Transparent copy: skipping the black pixels measured faster than an opaque copy.
     st->spr->pushSprite(&canvas_, px, py, kBackground);
-    mark(px + 3, py + 3, px + st->spr->width() - 4, py + st->spr->height() - 4);
+    markPhys(bucket(x), px + 3, py + 3, px + st->spr->width() - 4, py + st->spr->height() - 4);
   }
   static uint32_t key(uint32_t shape, uint32_t a = 0, uint32_t b = 0) { return (shape << 24) | (a << 12) | b; }
 
@@ -277,8 +314,8 @@ class OttoFace {
     h = std::max(h, 6.0f);
     const float r = std::min(w, h) / 2;
     mark(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
-    g_->fillSmoothRoundRect((int32_t)(cx - w / 2), (int32_t)(cy - h / 2), (int32_t)w, (int32_t)h,
-                                (int32_t)r, c);
+    const Pt p = T(cx, cy);  // rotated 90 degrees: width and height swap
+    g_->fillSmoothRoundRect((int32_t)(p.x - h / 2), (int32_t)(p.y - w / 2), (int32_t)h, (int32_t)w, (int32_t)r, c);
   }
   // Thick anti-aliased arc with round ends. Angles in degrees, y down.
   void stroke(float cx, float cy, float r, float a0, float a1, float thick, uint16_t c) {
@@ -290,7 +327,8 @@ class OttoFace {
     for (int i = 1; i <= n; ++i) {
       const float a = (a0 + (a1 - a0) * i / n) * kPi / 180;
       const float x = cx + r * cosf(a), y = cy + r * sinf(a);
-      g_->drawWideLine(px, py, x, y, thick / 2, c);
+      const Pt p0 = T(px, py), p1 = T(x, y);
+      g_->drawWideLine(p0.x, p0.y, p1.x, p1.y, thick / 2, c);
       px = x;
       py = y;
       x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y);
@@ -299,30 +337,35 @@ class OttoFace {
   }
   void disc(float cx, float cy, float r, uint16_t c) {
     if (c != kBackground) mark(cx - r, cy - r, cx + r, cy + r);
-    g_->fillSmoothCircle(cx, cy, r, c);
+    const Pt p = T(cx, cy);
+    g_->fillSmoothCircle(p.x, p.y, r, c);
   }
   void line(float x0, float y0, float x1, float y1, float thick, uint16_t c) {
     mark(std::min(x0, x1) - thick, std::min(y0, y1) - thick, std::max(x0, x1) + thick, std::max(y0, y1) + thick);
-    g_->drawWideLine(x0, y0, x1, y1, thick / 2, c);
+    const Pt a = T(x0, y0), b = T(x1, y1);
+    g_->drawWideLine(a.x, a.y, b.x, b.y, thick / 2, c);
   }
   void heart(float cx, float cy, float s, uint16_t c) {
     const float r = 0.27f * s;
     mark(cx - 0.55f * s, cy - 0.42f * s, cx + 0.55f * s, cy + 0.55f * s);
-    g_->fillSmoothCircle(cx - 0.25f * s, cy - 0.12f * s, r, c);
-    g_->fillSmoothCircle(cx + 0.25f * s, cy - 0.12f * s, r, c);
+    const Pt c1 = T(cx - 0.25f * s, cy - 0.12f * s), c2 = T(cx + 0.25f * s, cy - 0.12f * s);
+    g_->fillSmoothCircle(c1.x, c1.y, r, c);
+    g_->fillSmoothCircle(c2.x, c2.y, r, c);
     const float lx = cx - 0.5f * s, rx = cx + 0.5f * s, ty = cy - 0.02f * s, by = cy + 0.5f * s;
-    g_->fillTriangle(lx, ty, rx, ty, cx, by, c);
-    g_->fillRect(cx - 0.25f * s, cy - 0.15f * s, 0.5f * s, 0.2f * s, c);
+    const Pt t0 = T(lx, ty), t1 = T(rx, ty), t2 = T(cx, by);
+    g_->fillTriangle(t0.x, t0.y, t1.x, t1.y, t2.x, t2.y, c);
+    fillRectL(cx - 0.25f * s, cy - 0.15f * s, 0.5f * s, 0.2f * s, c);
     line(lx + 1, ty, cx, by - 1, 3, c);  // soften the slanted edges
     line(rx - 1, ty, cx, by - 1, 3, c);
   }
   void sparkle(float cx, float cy, float s, uint16_t c) {
     const float w = 0.16f * s;
     mark(cx - s, cy - s, cx + s, cy + s);
-    g_->drawWedgeLine(cx, cy, cx, cy - s, w, 0.5f, c);
-    g_->drawWedgeLine(cx, cy, cx, cy + s, w, 0.5f, c);
-    g_->drawWedgeLine(cx, cy, cx - s, cy, w, 0.5f, c);
-    g_->drawWedgeLine(cx, cy, cx + s, cy, w, 0.5f, c);
+    const Pt o = T(cx, cy);  // a 4-point star is the same after a 90 degree turn
+    g_->drawWedgeLine(o.x, o.y, o.x, o.y - s, w, 0.5f, c);
+    g_->drawWedgeLine(o.x, o.y, o.x, o.y + s, w, 0.5f, c);
+    g_->drawWedgeLine(o.x, o.y, o.x - s, o.y, w, 0.5f, c);
+    g_->drawWedgeLine(o.x, o.y, o.x + s, o.y, w, 0.5f, c);
   }
   void question(float cx, float cy, float s, uint16_t c) {
     const float r = 0.32f * s, th = 0.16f * s;
@@ -330,7 +373,8 @@ class OttoFace {
     stroke(cx, cy - 0.25f * s, r, 180, 420, th, c);  // hook over the top
     const float ex = cx + r * cosf(420 * kPi / 180), ey = cy - 0.25f * s + r * sinf(420 * kPi / 180);
     line(ex, ey, cx, cy + 0.22f * s, th, c);
-    g_->fillSmoothCircle(cx, cy + 0.48f * s, th * 0.6f, c);
+    const Pt d = T(cx, cy + 0.48f * s);
+    g_->fillSmoothCircle(d.x, d.y, th * 0.6f, c);
   }
   void zee(float cx, float cy, float s, uint16_t c) {
     const float h = s / 2, th = std::max(4.0f, 0.18f * s);
@@ -458,9 +502,12 @@ class OttoFace {
         } else {
           M5Canvas& h = hearts_[std::min(kHeartSteps - 1, (int)(beat * kHeartSteps))];
           const int w = h.width();
+          const int ax = kFlip ? w / 2 : w - 1 - w / 2, ay = kFlip ? w - 1 - w / 2 : w / 2;  // T(w/2, w/2)
           for (float x : {lx, rx}) {
-            h.pushSprite(&canvas_, (int)(x - w / 2), (int)(kEyeY - w / 2), kBackground);
-            mark(x - w / 2, kEyeY - w / 2, x + w / 2, kEyeY + w / 2);
+            const Pt P = T(x, kEyeY);
+            const int px = (int)lroundf(P.x) - ax, py = (int)lroundf(P.y) - ay;
+            h.pushSprite(&canvas_, px, py, kBackground);
+            markPhys(bucket(x), px, py, px + w, py + w);
           }
         }
         break;
@@ -475,7 +522,7 @@ class OttoFace {
         const float ry = kEyeY + D * 0.12f;
         auto half = [&](float px, float py, float h) {  // round eye with a flat upper lid
           blob(px, py, D, D, c);
-          g_->fillRect(px - D, py - D, 2 * D, D * 0.5f + (D * 0.62f - h), kBackground);
+          fillRectL(px - D, py - D, 2 * D, D * 0.5f + (D * 0.62f - h), kBackground);
         };
         const float qx = rx + D * 0.6f, qy = kEyeY - D * 0.62f + 6 * sinf(t * 2 * kPi * 0.8f);
         if (grow >= 1 && pop >= 1) {
@@ -505,7 +552,7 @@ class OttoFace {
         const float ax = 26 * sinf(t * 2 * kPi * 0.35f);
         auto lowered = [&](float px, float py, float g) {
           blob(px, py, D * 0.92f, D * 0.92f, c);
-          g_->fillRect(px - D, py - D, 2 * D, D - D * 0.46f + D * 0.5f * (1 - g), kBackground);
+          fillRectL(px - D, py - D, 2 * D, D - D * 0.46f + D * 0.5f * (1 - g), kBackground);
         };
         for (float x : {lx, rx}) {
           const float ex = x + ax, ey = kEyeY + D * 0.1f;
@@ -528,7 +575,7 @@ class OttoFace {
           const float ph = fmodf(t * 0.35f + i * 0.5f, 1.0f);
           const int q = std::min(31, (int)(ph * 32));  // 32 steps of size + fade
           const float qp = (q + 0.5f) / 32;
-          const float zx = rx + D * 0.45f + 30 * ph, zy = kEyeY - D * 0.35f - 150 * ph;
+          const float zx = rx + D * 0.45f + 40 * ph, zy = kEyeY - D * 0.35f - 110 * ph;
           stamp(key(11, q), 80, zx, zy,
                 [&](float px, float py) { zee(px, py, 26 + 22 * qp, color565(scaled(base, sinf(qp * kPi)))); });
         }

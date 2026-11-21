@@ -18,11 +18,12 @@
 namespace text {
 
 // ---- Layout (screen pixels). Change these to fit the 3D-printed body. --------
-constexpr int kPanelTop = face::kFaceBottom;  // Panel covers y 600 .. 1280.
-constexpr int kPanelHeight = 1280 - kPanelTop;
-constexpr int kTextTop = 660;                 // The words are centred in this zone.
-constexpr int kTextBottom = 1220;
-constexpr int kMaxWidth = 660;
+// Landscape 1280 x 720: the panel is the band under the eyes.
+constexpr int kPanelTop = face::kFaceBottom;  // Panel covers y 440 .. 720.
+constexpr int kPanelHeight = face::kHeight - kPanelTop;
+constexpr int kTextTop = 450;                 // The words are centred in this zone.
+constexpr int kTextBottom = 705;
+constexpr int kMaxWidth = 1160;               // wide: titles fit on one line
 constexpr int kWidth = face::kWidth;
 
 constexpr uint16_t kTextWhite = 0xFFFF;
@@ -61,7 +62,11 @@ class TextPanel {
   void redraw(const ReactionState& s) {
     canvas_.fillSprite(face::kBackground);
     if (s.title[0] != '\0' || s.detail[0] != '\0') drawWords(s);
-    canvas_.pushSprite(&M5.Display, 0, kPanelTop);
+    // The display stays in its fast native portrait rotation (see face::kFlip), so the
+    // landscape text band is pushed turned 90 degrees. It only redraws when the words change.
+    const float cx = face::kFlip ? kPanelTop + kPanelHeight / 2.0f : face::kPanelW - 1 - (kPanelTop + kPanelHeight / 2.0f);
+    const float cy = face::kFlip ? face::kWidth - 1 - face::kWidth / 2.0f : face::kWidth / 2.0f;
+    canvas_.pushRotateZoom(&M5.Display, cx, cy, face::kFlip ? 270.0f : 90.0f, 1.0f, 1.0f);
   }
 
   void drawWords(const ReactionState& s) {
@@ -78,7 +83,8 @@ class TextPanel {
 
     const bool stop = s.reaction == Reaction::Stop;
     if (stop) {
-      canvas_.fillSmoothRoundRect(20, y - 40, kWidth - 40, blockH + 70, 48,
+      const int boxW = 980;  // centred, not the full landscape width
+      canvas_.fillSmoothRoundRect((kWidth - boxW) / 2, y - 20, boxW, blockH + 30, 40,
                                   face::color565(face::kRed));
     }
 
