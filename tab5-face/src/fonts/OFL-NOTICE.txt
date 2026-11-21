@@ -1,0 +1,8 @@
+The font data in font_title.h and font_body.h is generated from
+M PLUS Rounded 1c ExtraBold (https://fonts.google.com/specimen/M+PLUS+Rounded+1c).
+
+Copyright 2016 The Rounded M+ Project Authors.
+Designer: Coji Morishita, M+ Fonts Project.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The full license text is at https://openfontlicense.org/open-font-license-official-text/
