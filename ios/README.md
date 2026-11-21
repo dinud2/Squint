@@ -5,6 +5,7 @@ and when), then see the day at a glance:
 - what Squint is showing at home right now
 - every dose on a timeline
 - only the things that need them
+- whether their routine is changing, week against their own usual (the **Trends** tab)
 
 SwiftUI, iOS 17+, no dependencies.
 
@@ -25,11 +26,16 @@ SwiftUI, iOS 17+, no dependencies.
 
 | | Demo (default) | Live |
 |---|---|---|
-| Data | Margaret and Robert, made up in `MockAPI` | the station's `/people`, `/medications`, `/today` |
+| Data | Margaret and Robert, made up in `MockAPI` | the station's `/people`, `/medications`, `/today`, `/insights` |
+| Trends | 30 seeded days: Margaret's mornings slip lately, Robert is steady | `/insights`. A new station shows "learning" until it has a week of usual; seed history with `buddy/tools/seed_history.py` |
 | Squint card | mood worked out from the doses, plus *Watch Squint's morning* | mirrors the Tab5 by long-polling `/tab5/commands` |
 | Switch | Settings → *Use demo data* | turn it off, set the station to `http://<pi>:8081` |
 
 The phone must be on the same network as the Pi. Allow *Local Network* when iOS asks.
+
+To try live mode without the Pi, run the backend on the Mac with no camera (in `buddy/`:
+`python3 -m buddy.service --bottle-source ""`), and set the station to `http://localhost:8081` in the simulator. If an older
+station has no `/insights`, Today still works and Trends says it couldn't load.
 
 ## Files
 
@@ -39,12 +45,15 @@ Squint/
   AppStore.swift         all state (@Observable): data, settings, Squint's state, demo playback
   API.swift              SquintAPI protocol, MockAPI (demo), LiveAPI (station), HomeSpeaker (voice)
   Models.swift           Person, Medication, Dose, ClockTime: same JSON as docs/api-contract.md
+  Insights.swift         routine tracking from /insights (signals, daily points), and the demo's
+                         seeded 30 days
   LabelParser.swift      reads a pharmacy label photo (Vision OCR) into a medication
   Views/
     SquintFace.swift     Squint's 8 moods drawn live, plus the card and badge, and a parser for
                          Tab5 command lines
     Components.swift     the design system: paper/ink colours, the pill glyph, buttons, cards
-    TodayView.swift      greeting, live Squint, day strip, alerts, per-person doses
+    TodayView.swift      greeting, live Squint, day strip, alerts, a routine nudge, per-person doses
+    TrendsView.swift     each person's steadiness ring, how-late chart against usual, and signals
     MedicationsView.swift, AddMedicationView.swift   list and add/edit (scan a label)
     OnboardingView.swift, SettingsView.swift
 ```

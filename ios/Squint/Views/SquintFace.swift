@@ -70,7 +70,8 @@ enum SquintMood: String, CaseIterable {
     }
 }
 
-/// Squint's eyes, drawn live (blinks, floating z's, a flashing STOP frame).
+/// Squint's eyes, drawn live the way the Tab5 draws them (tab5-face/OttoFace.h): just eyes,
+/// coloured by meaning, no extra marks.
 struct SquintFace: View {
     var mood: SquintMood
     var animated = true
@@ -97,15 +98,8 @@ struct SquintFace: View {
 
         switch mood {
         case .sleep:
-            for c in [L, R] { stroke(&ctx, arc(c, r * 0.95, from: 20, to: 160), col, r * 0.32) }
-            for i in 0..<3 {                                                  // z's float up and fade
-                let p = (t * 0.35 + Double(i) / 3).truncatingRemainder(dividingBy: 1)
-                let s = r * (0.55 + 0.25 * Double(i))
-                ctx.opacity = 1 - p
-                ctx.draw(Text("z").font(.system(size: s, weight: .heavy, design: .rounded)).foregroundStyle(col),
-                         at: CGPoint(x: R.x + r * 1.1 + p * r * 0.9, y: R.y - r * 0.9 - p * r * 2.2))
-                ctx.opacity = 1
-            }
+            let breathe = sin(t * 2 * .pi * 0.22) * r * 0.06                  // closed eyes, breathing
+            for c in [L, R] { stroke(&ctx, arc(CGPoint(x: c.x, y: c.y + breathe), r * 0.95, from: 20, to: 160), col, r * 0.32) }
         case .idle:
             for c in [L, R] { disc(&ctx, c, r, r * blink, col) }
         case .greet:
@@ -113,8 +107,6 @@ struct SquintFace: View {
         case .remind:
             disc(&ctx, L, r, r * blink, col)
             stroke(&ctx, arc(CGPoint(x: R.x, y: R.y + r * 0.35), r * 0.85, from: 210, to: 330), col, r * 0.3)
-            let tw = 0.75 + 0.25 * sin(t * 5)
-            sparkle(&ctx, CGPoint(x: R.x + r * 1.25, y: R.y - r * 1.05), r * 0.32 * tw, col)
         case .happy:
             let beat = 1 + 0.07 * sin(t * 5)
             for c in [L, R] {
@@ -126,9 +118,6 @@ struct SquintFace: View {
         case .concerned:
             disc(&ctx, L, r * 0.8, r * 1.05 * blink, col)
             halfDisc(&ctx, CGPoint(x: R.x, y: R.y + r * 0.1), r * 0.95, col)
-            let bob = sin(t * 3) * r * 0.08
-            ctx.draw(Text("?").font(.system(size: r * 1.1, weight: .heavy, design: .rounded)).foregroundStyle(col),
-                     at: CGPoint(x: R.x + r * 1.3, y: R.y - r * 1.3 + bob))
         case .stop:
             let shake = sin(t * 40) * r * 0.03
             for c in [L, R] {
@@ -137,25 +126,10 @@ struct SquintFace: View {
                            with: .color(col), lineWidth: r * 0.3)
                 disc(&ctx, cc, r * 0.17, r * 0.17, col)
             }
-            for i in -1...1 {                                                  // ||| alarm lines
-                let x = w / 2 + CGFloat(i) * r * 0.45
-                stroke(&ctx, line(CGPoint(x: x, y: L.y - r * 1.9), CGPoint(x: x, y: L.y - r * 1.5)), col, r * 0.12)
-            }
-            drop(&ctx, CGPoint(x: R.x + r * 1.25, y: R.y - r * 0.6), r * 0.22, col)
-            if sin(t * 6) > -0.2 {                                             // flashing frame
-                ctx.stroke(Path(roundedRect: CGRect(x: 4, y: 4, width: w - 8, height: h - 8), cornerRadius: min(w, h) * 0.12),
-                           with: .color(col), lineWidth: 4)
-            }
+
         case .wrong:
-            for c in [L, R] {
-                let low = CGPoint(x: c.x + r * 0.15, y: c.y + r * 0.25)       // eyes look down and away
-                halfDisc(&ctx, low, r * 0.85, col)
-                for k in 0..<3 {
-                    let x = low.x - r * 0.35 + CGFloat(k) * r * 0.35
-                    stroke(&ctx, line(CGPoint(x: x, y: low.y + r * 1.05), CGPoint(x: x - r * 0.15, y: low.y + r * 1.35)), col, r * 0.1)
-                }
-            }
-            drop(&ctx, CGPoint(x: R.x + r * 0.9, y: R.y - r * 1.2 + sin(t * 2) * r * 0.1), r * 0.2, col)
+            let glance = sin(t * 2 * .pi * 0.35) * r * 0.25                     // lowered eyes glancing away
+            for c in [L, R] { halfDisc(&ctx, CGPoint(x: c.x + glance, y: c.y + r * 0.25), r * 0.85, col) }
         }
     }
 
@@ -184,37 +158,10 @@ struct SquintFace: View {
         return p
     }
 
-    private func line(_ a: CGPoint, _ b: CGPoint) -> Path {
-        var p = Path()
-        p.move(to: a)
-        p.addLine(to: b)
-        return p
-    }
-
     private func stroke(_ ctx: inout GraphicsContext, _ p: Path, _ col: Color, _ width: CGFloat) {
         ctx.stroke(p, with: .color(col), style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
     }
 
-    private func sparkle(_ ctx: inout GraphicsContext, _ c: CGPoint, _ s: CGFloat, _ col: Color) {
-        var p = Path()
-        for i in 0..<8 {
-            let a = Double(i) * .pi / 4 - .pi / 2
-            let rr = i.isMultiple(of: 2) ? s : s * 0.3
-            let pt = CGPoint(x: c.x + rr * cos(a), y: c.y + rr * sin(a))
-            i == 0 ? p.move(to: pt) : p.addLine(to: pt)
-        }
-        p.closeSubpath()
-        ctx.fill(p, with: .color(col))
-    }
-
-    private func drop(_ ctx: inout GraphicsContext, _ c: CGPoint, _ r: CGFloat, _ col: Color) {
-        var p = Path()
-        p.move(to: CGPoint(x: c.x, y: c.y - r * 1.8))
-        p.addQuadCurve(to: CGPoint(x: c.x + r, y: c.y), control: CGPoint(x: c.x + r * 0.9, y: c.y - r * 0.9))
-        p.addArc(center: c, radius: r, startAngle: .degrees(0), endAngle: .degrees(180), clockwise: false)
-        p.addQuadCurve(to: CGPoint(x: c.x, y: c.y - r * 1.8), control: CGPoint(x: c.x - r * 0.9, y: c.y - r * 0.9))
-        ctx.fill(p, with: .color(col))
-    }
 }
 
 /// Squint as it looks on the counter: black screen, eyes, a few big words.
@@ -226,15 +173,7 @@ struct SquintCard: View {
         VStack(spacing: 8) {
             SquintFace(mood: state.mood)
                 .frame(height: 132)
-            if state.mood == .stop {
-                VStack(spacing: 2) {
-                    Text(state.title.isEmpty ? "STOP" : state.title).font(.system(size: 30, weight: .heavy, design: .rounded))
-                    if !state.detail.isEmpty { Text(state.detail).font(.system(.title3, design: .rounded, weight: .bold)) }
-                }
-                .foregroundStyle(.white)
-                .padding(.vertical, 12).padding(.horizontal, 24)
-                .background(SquintMood.red, in: RoundedRectangle(cornerRadius: 18))
-            } else if !state.title.isEmpty || !state.detail.isEmpty {
+            if !state.title.isEmpty || !state.detail.isEmpty {
                 VStack(spacing: 2) {
                     if !state.title.isEmpty {
                         Text(state.title).font(.system(size: 30, weight: .heavy, design: .rounded))

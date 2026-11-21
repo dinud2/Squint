@@ -4,6 +4,7 @@ import SwiftUI
 struct TodayView: View {
     @Environment(AppStore.self) private var store
     @State private var demo: Task<Void, Never>?
+    var openTrends: () -> Void = {}
 
     var body: some View {
         NavigationStack {
@@ -13,6 +14,7 @@ struct TodayView: View {
                     squint
                     status
                     if !store.doses.isEmpty { DayStrip() }
+                    if let r = store.routineAlert { RoutineNudge(insight: r, open: openTrends) }
                     if !store.attention.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             Eyebrow("Needs you")
@@ -267,5 +269,32 @@ struct PersonCard: View {
             }
         }
         .paperCard()
+    }
+}
+
+/// One line on Today when someone's routine has changed; tapping opens Trends.
+struct RoutineNudge: View {
+    let insight: PersonInsight
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 14) {
+                SquintBadge(mood: insight.level.mood, size: 34)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("ROUTINE · \(insight.level.label.uppercased())")
+                        .font(.system(size: 11, weight: .heavy, design: .rounded)).kerning(1)
+                        .foregroundStyle(insight.level.color)
+                    Text(insight.headline).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.footnote.weight(.bold)).foregroundStyle(Theme.muted)
+            }
+            .paperCard(22)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens Trends")
     }
 }

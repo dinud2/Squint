@@ -9,6 +9,7 @@ protocol SquintAPI: Sendable {
     func saveMedication(_ m: Medication) async throws -> Medication
     func deleteMedication(id: String) async throws
     func today() async throws -> [Dose]
+    func insights(days: Int) async throws -> Insights
 }
 
 nonisolated struct APIError: LocalizedError {
@@ -88,6 +89,10 @@ actor MockAPI: SquintAPI {
         return out.sorted { ($0.due, $0.personID) < ($1.due, $1.personID) }
     }
 
+    func insights(days: Int) async throws -> Insights {
+        MockAPI.demoInsights(people: ppl)
+    }
+
     private func unique(_ base: String, in ids: [String]) -> String {
         var id = base.isEmpty ? "item" : base, n = 2
         while ids.contains(id) { id = "\(base)_\(n)"; n += 1 }
@@ -114,6 +119,13 @@ nonisolated struct LiveAPI: SquintAPI {
 
     func today() async throws -> [Dose] { try await get("today") }
 
+    func insights(days: Int) async throws -> Insights {
+        let d = JSONDecoder()
+        d.keyDecodingStrategy = .convertFromSnakeCase
+        return try d.decode(Insights.self, from: try await request("GET", "insights", body: nil as Data?,
+                                                                   query: ["days": String(days)]))
+    }
+
     // ---- plumbing
     private func get<T: Decodable>(_ path: String) async throws -> T {
         try JSONDecoder().decode(T.self, from: try await request("GET", path, body: nil as Data?))
@@ -123,8 +135,13 @@ nonisolated struct LiveAPI: SquintAPI {
         try JSONDecoder().decode(T.self, from: try await request(method, path, body: try JSONEncoder().encode(body)))
     }
 
-    private func request(_ method: String, _ path: String, body: Data?) async throws -> Data {
-        var req = URLRequest(url: base.appendingPathComponent(path), timeoutInterval: 8)
+    private func request(_ method: String, _ path: String, body: Data?, query: [String: String] = [:]) async throws -> Data {
+        var url = base.appendingPathComponent(path)
+        if !query.isEmpty, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            c.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
+            url = c.url ?? url
+        }
+        var req = URLRequest(url: url, timeoutInterval: 8)
         req.httpMethod = method
         if let body {
             req.httpBody = body

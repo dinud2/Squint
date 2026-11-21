@@ -3,6 +3,7 @@
 Kept in data/store.json (git-ignored: it is personal). Medication ids are the bottle
 names the Tab5 recognises (tylenol, omega369, ...), person ids the enrolled faces.
 """
+import datetime
 import json
 import os
 import re
@@ -88,7 +89,8 @@ class Store:
 
     def add_med(self, m):
         with self.lock:
-            m = {"strength": "", "times": [], "notes": "", "risk": "normal", **m}
+            m = {"strength": "", "times": [], "notes": "", "risk": "normal",
+                 "since": time.strftime("%Y-%m-%d"), **m}       # first day it counts in history
             m["id"] = m.get("id") or self._new_id(_slug(m.get("name", "med")), self.d["medications"])
             self.d["medications"].append(m)
             self._save()
@@ -157,3 +159,29 @@ class Store:
                 "status": status, "at": _hm(now), "reason": reason}
             self._save()
         return {**d, "status": status, "at": _hm(now), "reason": reason}
+
+    def day(self, day, now=None):
+        """[Dose] for a past (or the current) day "YYYY-MM-DD": what was logged, the rest missed."""
+        now = now or time.time()
+        if day == time.strftime("%Y-%m-%d", time.localtime(now)):
+            return self.today(now)
+        log = self.d["log"].get(day, {})
+        out = []
+        for m in self.d["medications"]:
+            if m.get("since") and day < m["since"]:
+                continue
+            for due in m.get("times", []):
+                rec = log.get(f"{m['id']}|{m['for']}|{due}")
+                base = {"med": m["id"], "for": m["for"], "due": due}
+                out.append({**base, **rec} if rec else {**base, "status": "missed", "at": None, "reason": None})
+        return sorted(out, key=lambda d: (d["due"], d["for"], d["med"]))
+
+    def history(self, days=30, now=None):
+        """[{"date", "doses": [Dose]}] for the last `days` days, oldest first (today last)."""
+        now = now or time.time()
+        out = []
+        today = datetime.date.fromtimestamp(now)
+        for i in range(days - 1, -1, -1):          # calendar days, so DST changes can't skip one
+            day = (today - datetime.timedelta(days=i)).isoformat()
+            out.append({"date": day, "doses": self.day(day, now)})
+        return out

@@ -21,6 +21,7 @@ import time
 import urllib.request
 
 AUTO_CONFIRM = 0.90
+UNSURE_AFTER_S = 60       # a bottle picked up but never confirmed within this long counts as "unsure"
 AUTO_DELAY_S = 2.0
 GREET_COOLDOWN_S = 120    # people step in and out at a counter: say hello at most once per 2 min
 
@@ -55,13 +56,17 @@ class Tab5Queue:
 
 
 class Coordinator:
-    def __init__(self, hub, store, announce_url=None):
+    def __init__(self, hub, store, announce_url=None, journal=None):
         self.hub, self.store = hub, store
+        self.journal = journal                  # routine tracking (journal.py); None = don't log
         self.announce_url = announce_url        # e.g. http://<laptop>:8765/announce (home/server.py)
         self.tab5 = Tab5Queue()
         self.present = []
         self.pending = None                     # {"med", "for", "t"} waiting for "did you take it?"
         self.last_greet = {}                    # person -> time of the last spoken greeting
+        self.arrived_at = {}                    # person -> when this visit started
+        self.due_at_arrival = {}                # person -> med ids that were due when they arrived
+        self.took_this_visit = set()            # people who confirmed a dose during this visit
         self.lock = threading.Lock()
         hub.listeners.append(self.on_event)
 
@@ -81,6 +86,19 @@ class Coordinator:
 
     def show(self, line):
         self.tab5.push(line)
+
+    def log(self, type_, who, **fields):
+        if self.journal is not None:
+            try:
+                self.journal.record(type_, who, **fields)
+            except OSError as e:                # a full disk must not stop the buddy
+                print("[journal]", e, flush=True)
+
+    def due_now(self, pid):
+        """Med ids this person should be taking right now (due time passed, not taken yet)."""
+        now_m = int(time.strftime("%H")) * 60 + int(time.strftime("%M"))
+        return [d["med"] for d in self.store.open_doses(pid)
+                if int(d["due"][:2]) * 60 + int(d["due"][3:]) <= now_m]
 
     # ------------------------------------------------------------ inputs
     def on_event(self, ev):
@@ -104,9 +122,22 @@ class Coordinator:
         return names
 
     def on_people(self, people):
+        now = time.time()
         with self.lock:
             arrived = [p for p in people if p not in self.present]
+            left = [p for p in self.present if p not in people]
             self.present = list(people)
+        for pid in arrived:
+            self.arrived_at[pid] = now
+            self.due_at_arrival[pid] = self.due_now(pid)
+            self.took_this_visit.discard(pid)
+            self.log("arrive", pid)
+        for pid in left:
+            stayed = round(now - self.arrived_at.pop(pid, now))
+            self.log("leave", pid, stayed_s=stayed)
+            due = self.due_at_arrival.pop(pid, [])
+            if due and pid not in self.took_this_visit and stayed >= 5:
+                self.log("visit_no_dose", pid, due=due)
         if not people:
             self.show("away")
             return
@@ -143,6 +174,7 @@ class Coordinator:
         owner, oname, mname = m["for"], self.store.name(m["for"]), m["name"]
         present = list(self.present)
         if present and owner not in present:
+            self.log("wrong_bottle", present, med=bottle, owner=owner)
             who = join_names([self.store.name(p) for p in present])
             self.show(f"wrong {oname}'s pills|That's {oname}'s {mname}")
             self.say(f"Careful {who}, that's {oname}'s {mname}.")
@@ -152,12 +184,24 @@ class Coordinator:
         # high risk: never a second dose the same day; otherwise only if no dose of it is left today
         if taken and (m.get("risk") == "high" or not open_this):
             at = taken[-1]["at"]
+            self.log("double_dose", owner, med=bottle, first_at=at)
             self.show(f"stop Already taken|{mname} at {at}")
             self.say(f"Stop, {oname}. You already took your {mname} at {at}.")
             return
         with self.lock:
-            self.pending = {"med": bottle, "for": owner, "t": time.time()}
+            p = self.pending = {"med": bottle, "for": owner, "t": time.time()}
+        self.log("bottle", owner, med=bottle)
         self.show(f"remind {mname}|Did you take it?")
+        tm = threading.Timer(UNSURE_AFTER_S, self._never_answered, args=(p,))
+        tm.daemon = True                        # never keeps the service from shutting down
+        tm.start()
+
+    def _never_answered(self, p):
+        with self.lock:
+            if self.pending is not p:
+                return                          # answered, or another bottle since
+            self.pending = None
+        self.log("unsure", p["for"], med=p["med"], reason="no_answer")
 
     def on_intake(self, person, confidence):
         """From the counter camera's hand-to-mouth check."""
@@ -179,12 +223,19 @@ class Coordinator:
         if m is None:
             return {"error": f"unknown medication {med}"}
         if not taken:
+            self.log("unsure", person, med=med, reason="said_no")
             self.show("idle")
             return {"med": med, "for": person, "status": "due"}
         d = self.store.mark(med, person, "taken", reason=None if how != "auto" else None)
         if d is None:
             return {"error": f"no open dose of {med} for {person} today"}
         self.hub.publish({"type": "dose_taken", "med": med, "for": person, "at": d["at"], "how": how})
+        now_m = int(d["at"][:2]) * 60 + int(d["at"][3:])
+        arrived = self.arrived_at.get(person)
+        self.took_this_visit.add(person)
+        self.log("dose", person, med=med, due=d["due"], at=d["at"], how=how,
+                 late_min=now_m - (int(d["due"][:2]) * 60 + int(d["due"][3:])),
+                 since_arrival_s=round(time.time() - arrived) if arrived else None)
         if how != "auto":
             self.show(f"happy Well done!|{m['name']}")
         left = self.med_list(person)
