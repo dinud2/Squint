@@ -47,7 +47,6 @@ Everything talks plain HTTP + JSON on one local network. The endpoints are in
 | [`pi/`](pi/README.md) | Camera streams for QNX (`camstream.c`) and `squint_start.sh` to start everything after a reboot | Dinu | working |
 | [`ios/`](ios/README.md) | Caregiver app (SwiftUI): setup, today's doses, live Squint, routine trends, label scanning, Siri, widget | Ved | working (demo + live) |
 | [`home/`](home/README.md) | The voice: offline Piper text-to-speech, cast to a Google Nest (or played on the laptop) | Ved | working |
-| [`rig/`](rig/README.md) | Blender scene of the counter and an STL mount for the C270 | Ved | done |
 | [`docs/`](docs/) | [API contract](docs/api-contract.md), [Tab5 ↔ Pi link](docs/tab5-pi.md), [decline tracking](docs/decline-tracking.md) | all | |
 
 ## Run the demo
