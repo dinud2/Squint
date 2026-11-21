@@ -59,7 +59,7 @@ Everything talks plain HTTP + JSON on one local network. The endpoints are in
 | [`pi/`](pi/README.md) | Camera stream for QNX (`camstream.c`) and `squint_start.sh` to start everything after a reboot | Dinu | working |
 | [`ios/`](ios/README.md) | Caregiver app (SwiftUI): setup, today's doses, live Squint, routine trends, label scanning, Siri and Shortcuts, home and lock screen widget | Ved | working, demo and live |
 | [`home/`](home/README.md) | The voice: offline Piper text-to-speech, cast to a Google Nest, or played on the laptop (e.g. to a Google Home paired over Bluetooth) | Ved | working |
-| [`docs/`](docs/) | [API contract](docs/api-contract.md), [Tab5 ↔ Pi link](docs/tab5-pi.md), [routine tracking](docs/decline-tracking.md) | all | |
+| [`docs/`](docs/) | [API contract](docs/api-contract.md), [Tab5 ↔ Pi link](docs/tab5-pi.md), [routine tracking](docs/decline-tracking.md), [camera and models](docs/camera-models.md) | all | |
 
 **The models.** All four run with OpenCV's `cv2.dnn`, so the same code runs on QNX and a laptop:
 
