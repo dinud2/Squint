@@ -135,6 +135,11 @@ def make_handler(hub, bottles=None, coord=None):
                 if coord.journal is None:
                     return self._json({"error": "routine tracking is off (no journal)"}, 503)
                 return self._json(insights(coord.store, coord.journal, days))
+            if coord is not None and u.path == "/doses/pending":   # what "Did you take it?" is about
+                p = coord.pending
+                return self._json({"pending": None if not p else {"med": p["med"], "for": p["for"],
+                                                                 "name": coord.store.med(p["med"])["name"]
+                                                                 if coord.store.med(p["med"]) else p["med"]}})
             if coord is not None and u.path in ("/people", "/medications", "/today", "/tab5/commands"):
                 st = coord.store
                 if u.path == "/people":

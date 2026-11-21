@@ -193,7 +193,7 @@ class Coordinator:
         with self.lock:
             p = self.pending = {"med": bottle, "for": owner, "t": time.time()}
         self.log("bottle", owner, med=bottle)
-        self.show(f"remind {mname}|Did you take it?")
+        self.show(f"ask {mname}|Did you take it?")   # Tab5: Yes / No, waits for a tap
         tm = threading.Timer(UNSURE_AFTER_S, self._never_answered, args=(p,))
         tm.daemon = True                        # never keeps the service from shutting down
         tm.start()
@@ -212,15 +212,28 @@ class Coordinator:
         if not p or (person and person != p["for"]):
             return
         if confidence >= AUTO_CONFIRM:
-            self.show(f"happy Taken|{self.store.med(p['med'])['name']}")
-            threading.Timer(AUTO_DELAY_S, self.confirm, args=(p["med"], p["for"], True, "auto")).start()
+            # Tab5: Yes / No with Yes ticking itself after AUTO_DELAY_S; the Pi records it unless
+            # the person taps No first (that clears pending, and the timer then does nothing).
+            self.show(f"taken {self.store.med(p['med'])['name']}|Did you take it?")
+            threading.Timer(AUTO_DELAY_S, self._auto_confirm, args=(p,)).start()
+
+    def _auto_confirm(self, p):
+        with self.lock:
+            still = self.pending is p
+        if still:
+            self.confirm(p["med"], p["for"], True, "auto")
 
     def confirm(self, med, person, taken=True, how="tab5"):
-        """POST /doses/confirm, or the auto-confirm timer."""
+        """POST /doses/confirm, or the auto-confirm timer. med/person may be omitted: then the
+        dose currently waiting for "Did you take it?" is meant (the Tab5's Yes / No buttons)."""
         with self.lock:
             p = self.pending
+            if p and not med and not person:
+                med, person = p["med"], p["for"]
             if p and p["med"] == med and p["for"] == person:
                 self.pending = None
+        if not med:
+            return {"error": "no dose is waiting for an answer"}
         m = self.store.med(med)
         if m is None:
             return {"error": f"unknown medication {med}"}
