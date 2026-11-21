@@ -34,6 +34,7 @@ ENROL_SECONDS = 6.0
 ENROL_TIMEOUT_S = 20.0
 PERSON_MIN = 0.3      # nose and at least one shoulder must be this confident
 HAND_MIN = 0.3        # ...and the wrist we crop around
+FRESH_FRAMES = 3      # bottle frames needed after a dose before the next intake can fire
 
 
 def person_present(kps):
@@ -58,6 +59,7 @@ class Vision:
         self.person = False
         self.held_med = "none"     # last bottle seen in hand (survives brief "none" flickers)
         self.intake_med = None     # bottle named in intake_start, reused for its intake_done
+        self.fresh_needed = 0      # after a dose: bottle frames still needed before intake can re-arm
         self.load_meds()
 
     # ---------------- bus handlers
@@ -125,9 +127,14 @@ class Vision:
                 if ch[0] == "unknown":
                     ev["candidates"] = self.stable_candidates()
                 self.send(ev)
+        if label is not None and label != "none" and self.fresh_needed:
+            self.fresh_needed -= 1
         if self.tracker.current != "none":
             self.held_med = self.tracker.current
-        armed = self.tracker.current != "none"
+        # The smoothed verdict holds a bottle for a few seconds after it disappears, so it can't
+        # arm the next dose by itself: after intake_done the bottle must actually be seen again.
+        # Otherwise an empty hand raised to the mouth just after a dose re-fires intake_start.
+        armed = self.tracker.current != "none" and not self.fresh_needed
         for ev in self.intake.update(t, kps, armed):
             if ev["type"] == "intake_start":
                 # armed may come from the 8 s hold after the verdict went to "none": name the held bottle
@@ -137,6 +144,7 @@ class Vision:
                 # intake_done is about the same dose as its intake_start, whatever is visible now
                 med = self.intake_med if self.intake_med is not None else self.tracker.current
                 self.intake_med = None
+                self.fresh_needed = FRESH_FRAMES
             ev["med"] = med
             ev["frame_time"] = t
             self.send(ev)

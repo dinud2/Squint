@@ -136,6 +136,28 @@ def test_intake_done_names_the_bottle_from_intake_start():
         assert meds["intake_done"] == "omega", sent
 
 
+def test_empty_hand_after_a_dose_does_not_refire():
+    """Live bug: after a dose, raising an EMPTY hand to the mouth kept firing intake_start,
+    because the smoothed verdict still said "omega" and each new intake ignored "none"."""
+    import vision_main
+    v = vision_main.Vision(os.path.join(HERE, "no_such_meds.json"), verbose=False)
+    sent = []
+    v.send = sent.append
+    v.embed = lambda crop: crop
+    v.gallery.classify = lambda crop: (("omega", 0.9, {}) if crop[0] > 0 else ("none", 0.9, {}))
+    t0 = 0.0
+    for i, seed in enumerate((3, 4, 5)):          # 1 dose with the bottle, then 2 empty-hand raises
+        s = simulate("bottle_to_mouth_slow", np.random.default_rng(seed), fps=15)
+        for t, k in zip(s["t"], s["kps"]):        # dose: bottle in hand until the mouth, then put down
+            holding = 1.0 if i == 0 and t < s["t_contact"] else -1.0
+            v.step(t0 + float(t), kps=k, crop=np.array([holding]))
+        for j in range(8):                        # bottle put down, hand empty (< the 2.5 s none hold)
+            v.step(t0 + float(s["t"][-1]) + 0.067 * (j + 1), kps=s["kps"][0], crop=np.array([-1.0]))
+        t0 += float(s["t"][-1]) + 0.6
+    starts = [e for e in sent if e["type"] == "intake_start"]
+    assert len(starts) == 1, sent
+
+
 def test_bus_roundtrip():
     import bus
     got = []
