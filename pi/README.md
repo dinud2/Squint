@@ -1,7 +1,14 @@
 # Pi camera stream
 
-Streams the Raspberry Pi 5 camera (QNX 8) as MJPEG over HTTP. The camera in use is a
-**Logitech C270 USB webcam** (camera unit 5), not a Camera Module.
+Streams the Raspberry Pi 5's USB cameras (QNX 8) as MJPEG over HTTP. Squint uses two:
+
+| Port | Camera | QNX unit | Points | Used for |
+|---|---|---|---|---|
+| `:8080` | Logitech Brio 101 | 8 | down at the counter | bottles |
+| `:8082` | Logitech C270 | 5 | up at the person | faces |
+
+**After a reboot, run `./squint_start.sh`.** It starts both streams and the backend (`buddy/`), and
+restarts QNX's camera service if a camera went missing. The rest of this page is about one stream.
 
 ## Build and run (on the Pi)
 
@@ -39,8 +46,8 @@ process can hold the camera.
 
 - **Run it at a fixed, high priority** so the camera can't be starved by recognition work:
   `on -p 20 ./camstream 5 8080 > camstream.log 2>&1 &`
-- **Port 8080 belongs to the camera.** Recognition reads `http://localhost:8080/stream` on the
-  Pi, or `http://<pi-ip>:8080/stream` from a laptop.
+- **Ports 8080 and 8082 belong to the cameras.** Recognition reads `http://localhost:8080/stream` on
+  the Pi, or `http://<pi-ip>:8080/stream` from a laptop.
 - **If the camera stalls, the stream goes quiet.** Consumers should treat no frames for a few
   seconds as "camera down", never reuse an old frame.
 
