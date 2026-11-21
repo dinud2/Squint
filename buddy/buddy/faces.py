@@ -45,6 +45,42 @@ class FaceID:
         faces = [f for f in faces if min(f[2], f[3]) >= MIN_FACE_PX]
         return max(faces, key=lambda f: f[2] * f[3]) if faces else None
 
+    def all_faces(self, frame, max_faces=4):
+        """-> YuNet rows of every big-enough face, largest first (closest to the counter)."""
+        h, w = frame.shape[:2]
+        self.det.setInputSize((w, h))
+        _, faces = self.det.detect(frame)
+        if faces is None:
+            return []
+        faces = [f for f in faces if min(f[2], f[3]) >= MIN_FACE_PX]
+        return sorted(faces, key=lambda f: -f[2] * f[3])[:max_faces]
+
+    def identify_all(self, frame):
+        """Name every face at the counter. -> list of (face_row, name, score, scores), largest first.
+
+        A person can only be in one place: names are handed out best match first, and a
+        face whose best person is already taken gets its next acceptable person, or
+        "unknown" (two faces both closest to Dinu -> the better one is Dinu)."""
+        faces = self.all_faces(frame)
+        cands = []
+        for i, f in enumerate(faces):
+            sc = self.scores(self.embed(self.align(frame, f)))
+            for name, s in sc.items():
+                others = [v for n, v in sc.items() if n != name]
+                if s >= ACCEPT and s - (max(others) if others else -1.0) >= MARGIN:
+                    cands.append((s, i, name))
+                elif s >= ACCEPT and others and s >= max(others):
+                    cands.append((s - 1.0, i, name))       # ambiguous: only if nothing better
+            faces[i] = (f, sc)
+        out = [[f, "unknown", max(sc.values()) if sc else 0.0, sc] for f, sc in faces]
+        used_face, used_name = set(), set()
+        for s, i, name in sorted(cands, reverse=True):
+            if i in used_face or name in used_name or s < ACCEPT:
+                continue
+            out[i][1], out[i][2] = name, s
+            used_face.add(i); used_name.add(name)
+        return [tuple(o) for o in out]
+
     def align(self, frame, face):
         return self.rec.alignCrop(frame, face)          # 112x112, eyes level
 

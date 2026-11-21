@@ -23,24 +23,24 @@ def main():
     fid, cam = FaceID(), Camera(a.source)
     print("enrolled:", sorted(fid.people))
     last = None
+    colors = [(0, 200, 0), (255, 160, 0), (200, 0, 200), (0, 200, 200)]
     while True:
         t, fr = cam.read()
         t0 = time.time()
-        face = fid.main_face(fr)
-        name, score, sc = ("nobody", 0.0, {})
-        if face is not None:
-            name, score, sc = fid.identify(fid.embed(fid.align(fr, face)))
+        seen = fid.identify_all(fr)
         ms = (time.time() - t0) * 1000
-        if name != last:
-            print(f"{time.strftime('%H:%M:%S')} {name:8s} {score:.2f} {({k: round(v, 2) for k, v in sc.items()})}  {ms:.0f} ms")
-            last = name
+        summary = tuple(sorted(n for _, n, _, _ in seen)) or ("nobody",)
+        if summary != last:
+            parts = [f"{n} {s:.2f}" for _, n, s, _ in seen] or ["nobody"]
+            print(f"{time.strftime('%H:%M:%S')} {' | '.join(parts)}   {ms:.0f} ms")
+            last = summary
         if not a.no_show:
-            if face is not None:
+            for k, (face, name, score, sc) in enumerate(seen):
                 x, y, w, h = face[:4].astype(int)
-                col = (0, 200, 0) if name not in ("unknown", "nobody") else (0, 165, 255)
+                col = colors[k % len(colors)] if name != "unknown" else (0, 165, 255)
                 cv2.rectangle(fr, (x, y), (x + w, y + h), col, 2)
                 cv2.putText(fr, f"{name} {score:.2f}", (x, max(25, y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, col, 2)
-            cv2.putText(fr, f"{ms:.0f} ms", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.putText(fr, f"{len(seen)} face(s)  {ms:.0f} ms", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             cv2.imshow("faces", fr)
             if (cv2.waitKey(1) & 0xFF) == ord("q"):
                 break
