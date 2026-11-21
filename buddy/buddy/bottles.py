@@ -33,6 +33,8 @@ class Embedder:
         x = ((img - MEAN) / STD).transpose(2, 0, 1)[None]
         self.net.setInput(np.ascontiguousarray(x))
         v = np.asarray(self.net.forward()).reshape(-1).astype(np.float32)
+        if not np.all(np.isfinite(v)):        # e.g. a bad / black frame while the camera starts
+            return np.zeros_like(v)
         return v / (np.linalg.norm(v) + 1e-8)
 
 
@@ -104,7 +106,9 @@ class Gallery:
 
     def identify(self, emb):
         """-> (name or "unknown", best score, all scores)."""
-        sc = self.scores(emb)
+        if not np.any(emb) or not np.all(np.isfinite(emb)):
+            return "unknown", 0.0, {}
+        sc = {n: v for n, v in self.scores(emb).items() if np.isfinite(v)}
         if not sc:
             return "unknown", 0.0, sc
         ranked = sorted(sc.items(), key=lambda kv: -kv[1])
