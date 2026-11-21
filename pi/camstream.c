@@ -232,10 +232,15 @@ int main(int argc, char **argv) {
     if (e) e = camera_open(unit, 0x5, &cam);
     if (e) { fprintf(stderr, "camera_open(unit %d) failed: %d\n", unit, e); return 1; }
     // Must be set before the viewfinder starts. On failure keep the camera's default size.
-    if ((e = camera_private_set_vf_property(cam, VF_FRAMERATE, fps, VF_END)))
-        fprintf(stderr, "could not set %.1f fps (err %d)\n", fps, e);
+    // The driver keeps the last size/rate between runs, and a rate the current size can't do
+    // (or a size the current rate can't do) is rejected. Order that works from any state:
+    // smallest size, then the rate, then the requested size; retry the rate if it failed.
+    camera_private_set_vf_property(cam, VF_WIDTH, 640, VF_HEIGHT, 480, VF_END);
+    int fe = camera_private_set_vf_property(cam, VF_FRAMERATE, fps, VF_END);
     if ((e = camera_private_set_vf_property(cam, VF_WIDTH, width, VF_HEIGHT, height, VF_END)))
         fprintf(stderr, "could not set %dx%d (err %d), using the camera default\n", width, height, e);
+    if (fe && (fe = camera_private_set_vf_property(cam, VF_FRAMERATE, fps, VF_END)))
+        fprintf(stderr, "could not set %.1f fps (err %d)\n", fps, fe);
     uint32_t w = 0, h = 0;
     double fr = 0;
     camera_private_get_vf_property(cam, VF_WIDTH, &w, VF_HEIGHT, &h, VF_FRAMERATE, &fr, VF_END);
