@@ -19,10 +19,11 @@ struct RootView: View {
     @State private var tab = Tab.today
 
     enum Tab: String, CaseIterable {
-        case today = "Today", medications = "Medicines", settings = "Settings"
+        case today = "Today", trends = "Trends", medications = "Medicines", settings = "Settings"
         var icon: String {
             switch self {
             case .today: "eyes"
+            case .trends: "chart.line.uptrend.xyaxis"
             case .medications: "pills.fill"
             case .settings: "slider.horizontal.3"
             }
@@ -34,7 +35,8 @@ struct RootView: View {
             if store.onboarded {
                 ZStack {
                     switch tab {
-                    case .today: TodayView()
+                    case .today: TodayView { withAnimation(.spring(duration: 0.3)) { tab = .trends } }
+                    case .trends: TrendsView()
                     case .medications: MedicationsView()
                     case .settings: SettingsView()
                     }
@@ -48,6 +50,15 @@ struct RootView: View {
         .task { await store.refresh() }
         .task(id: store.useDemoData) {
             if !store.useDemoData { await store.followStation() }
+        }
+    }
+
+    /// A dot on a tab that has something for the caregiver: red for today's alerts, amber/red for routine.
+    private func badge(for t: Tab) -> Color? {
+        switch t {
+        case .today: store.attention.isEmpty ? nil : Theme.flagged
+        case .trends: store.routineAlert?.level.color
+        default: nil
         }
     }
 
@@ -66,8 +77,8 @@ struct RootView: View {
                     .padding(.horizontal, tab == t ? 18 : 16).padding(.vertical, 12)
                     .background { if tab == t { Capsule().fill(Theme.paper) } }
                     .overlay(alignment: .topTrailing) {
-                        if t == .today && !store.attention.isEmpty && tab != .today {
-                            Circle().fill(Theme.flagged).frame(width: 8, height: 8).offset(x: -8, y: 6)
+                        if tab != t, let c = badge(for: t) {
+                            Circle().fill(c).frame(width: 8, height: 8).offset(x: -8, y: 6)
                         }
                     }
                     .contentShape(Capsule())
