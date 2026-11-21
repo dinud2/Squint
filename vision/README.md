@@ -2,7 +2,7 @@
 
 Which bottle is in her hand, and is a pill about to go into her mouth? Everything runs on the
 station, in Python + ONNX (ONNX Runtime **or** OpenCV DNN, so it works on QNX either way).
-The write-up of how it was built and tested is in [BLOG.md](BLOG.md).
+Evaluation numbers and plots are in `reports/`.
 
 ## Setup (laptop)
 
