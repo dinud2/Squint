@@ -35,6 +35,8 @@ def score(seqs, model, thr, consec, latency_s=0.08, gate=True, min_lead_s=0.0):
                 caught += 1
                 k[0] += 1
                 leads.append(s["t_contact"] - early[0] - latency_s)
+        elif s["kind"] == "aborted_raise":
+            k[0] += bool(fires)   # conservative early STOP; reported per kind, not a false alarm
         else:
             n_neg += 1
             if fires:

@@ -22,7 +22,8 @@ from squint_vision import intake as I  # noqa: E402
 
 POS_FROM_ONSET = 0.12   # s after the hand starts moving
 POS_BEFORE_CONTACT = 0.03
-POS_MAX_LEAD = 1.0      # windows more than 1 s before contact are not "imminent"
+POS_MAX_LEAD = 1.0
+HARD_NEG_W = 5.0        # negatives done with a bottle in hand are the ones that can sound STOP      # windows more than 1 s before contact are not "imminent"
 
 
 # ------------------------------------------------------------ data
@@ -56,6 +57,8 @@ def labels(seq, T):
         w[(T > tc - POS_BEFORE_CONTACT)] = 0          # at/after the mouth: don't care
         w[(T >= ton) & (T < ton + POS_FROM_ONSET)] = 0  # first 120 ms of motion: ambiguous
         w[(T >= ton) & (T < tc - POS_MAX_LEAD)] = 0
+    elif bool(np.any(seq["armed"])) and seq["kind"] != "aborted_raise":
+        w[:] = HARD_NEG_W
     elif seq["kind"] == "aborted_raise":
         # lifting an already-taken bottle toward the mouth SHOULD warn; don't punish it
         w[T >= seq["t_on"]] = 0
@@ -149,6 +152,7 @@ def replay(T, P, D, armed_fn, thr, consec, hold=8.0):
 def seq_score(seqs, traces, probs, thr, consec, latency=0.08, gate=True):
     caught, leads, fa, by_kind = 0, [], 0, {}
     npos = nneg = 0
+    fa_armed = n_armed = 0
     for s, (T, X, D), P in zip(seqs, traces, probs):
         armed_any = bool(np.any(s["armed"]))
         fires = replay(T, P, D, (lambda t, a=armed_any: a) if gate else (lambda t: True), thr, consec)
@@ -165,10 +169,14 @@ def seq_score(seqs, traces, probs, thr, consec, latency=0.08, gate=True):
                 k[0] += 1          # reported per kind only: a conservative early STOP
         else:
             nneg += 1
+            if armed_any:
+                n_armed += 1
+                fa_armed += bool(fires)
             if fires:
                 fa += 1; k[0] += 1
     leads = np.array(leads or [0.0])
     return {"catch_rate": round(caught / max(npos, 1), 4), "false_alarm_rate": round(fa / max(nneg, 1), 4),
+            "fa_armed": round(fa_armed / max(n_armed, 1), 4),
             "lead_ms_median": round(float(np.median(leads)) * 1000), "lead_ms_p10": round(float(np.percentile(leads, 10)) * 1000),
             "n_pos": npos, "n_neg": nneg,
             "by_kind": {kk: round(v[0] / v[1], 3) for kk, v in sorted(by_kind.items())}}
@@ -186,7 +194,7 @@ def choose_threshold(seqs, traces, spec, max_fa=0.05):
         for thr in grid:
             r = seq_score(seqs, traces, probs, thr, consec)
             # objective: catch as many as possible; false alarms cost 3x
-            obj = r["catch_rate"] - 3 * max(0, r["false_alarm_rate"] - max_fa) - 0.5 * r["false_alarm_rate"]
+            obj = r["catch_rate"] - 3 * max(0, r["false_alarm_rate"] - max_fa) - 0.5 * r["fa_armed"]
             if best is None or obj > best[0]:
                 best = (obj, float(thr), consec, r)
     return best[1], best[2], best[3]
@@ -226,6 +234,8 @@ def main():
     print(f"trained logreg ({time.time()-t0:.1f}s)")
     candidates["mlp16"] = train(Xtr, ytr, wtr, hidden=16, epochs=300)
     print(f"trained mlp16 ({time.time()-t0:.1f}s)")
+    candidates["mlp32"] = train(Xtr, ytr, wtr, hidden=32, epochs=400)
+    print(f"trained mlp32 ({time.time()-t0:.1f}s)")
     for name, spec in candidates.items():
         thr, consec, rv = choose_threshold(val_s, tr_val, spec)
         probs = [predict(spec, X) if len(X) else np.zeros(0) for _, X, _ in tr_test]
@@ -233,13 +243,13 @@ def main():
         rt_nogate = seq_score(test_s, tr_test, probs, thr, consec, gate=False)
         results[name] = {"threshold": thr, "consec": consec, "val": rv, "test": rt, "test_no_bottle_gate": rt_nogate}
         print(f"{name:7s} thr={thr:.2f} consec={consec} | VAL catch={rv['catch_rate']:.3f} fa={rv['false_alarm_rate']:.3f}"
-              f" | TEST catch={rt['catch_rate']:.3f} fa={rt['false_alarm_rate']:.3f} lead_med={rt['lead_ms_median']}ms"
+              f" | TEST catch={rt['catch_rate']:.3f} fa={rt['false_alarm_rate']:.3f} fa_armed={rt['fa_armed']:.3f} lead_med={rt['lead_ms_median']}ms"
               f" p10={rt['lead_ms_p10']}ms | no-gate fa={rt_nogate['false_alarm_rate']:.3f}")
 
     # pick the winner on VALIDATION, never on test
     def val_obj(r):
         v = r["val"]
-        return v["catch_rate"] - 0.5 * v["false_alarm_rate"]
+        return v["catch_rate"] - 0.5 * v["false_alarm_rate"] - 0.5 * v["fa_armed"]
     learned = {k: v for k, v in results.items() if k != "rule"}
     win = max(learned, key=lambda k: val_obj(learned[k]))
     spec = dict(candidates[win])

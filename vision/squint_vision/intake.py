@@ -23,7 +23,8 @@ from . import pose as P
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_FILE = os.path.join(HERE, "models", "intake_model.json")
 
-WINDOW_S = 0.7
+WINDOW_S = 1.0          # long window; a 0.4 s short window is cut from its end
+SHORT_S = 0.4
 CONTACT_D = 0.45     # hand-to-mouth distance (shoulder widths) that counts as "at the mouth"
 RELEASE_D = 0.85     # hand has left the mouth again
 RESET_D = 1.6        # hand back down: approach is over
@@ -32,7 +33,30 @@ FEATURE_NAMES = [
     "d_last", "d_min", "d_drop", "slope_d", "slope_d_recent", "accel_d",
     "dy_last", "slope_dy", "dx_last", "elbow_last", "slope_elbow",
     "ttc", "jitter", "conf_mean", "fore_last", "slope_fore",
+    "quad_v", "quad_a", "d_stop",
 ]
+BASE_FEATURES = list(FEATURE_NAMES)
+FEATURE_NAMES = [f + "_L" for f in BASE_FEATURES] + [f + "_S" for f in BASE_FEATURES]
+# the rule and simple code refer to the long-window names below via this map
+F = {n: i for i, n in enumerate(FEATURE_NAMES)}
+
+
+def _stop_estimate(t, d):
+    """Fit d(t) = c0 + v*t + a*t^2 over the last 0.4 s (t measured from now).
+    A decelerating reach (v<0, a>0) stops where the parabola bottoms out."""
+    m = t >= t[-1] - 0.4
+    if m.sum() < 4:
+        return 0.0, 0.0, float(d[-1])
+    tt = t[m] - t[-1]
+    A = np.stack([np.ones_like(tt), tt, tt * tt], 1)
+    c0, v, a = np.linalg.lstsq(A, d[m], rcond=None)[0]
+    if v < 0 and a > 0.05:
+        stop = c0 - v * v / (4 * a)
+    elif v < 0:
+        stop = c0 + v * 0.5            # not slowing yet: assume ~0.5 s more of travel
+    else:
+        stop = c0
+    return float(v), float(a), float(np.clip(stop, -1.0, 3.0))
 
 
 def _angle(a, b, c):
@@ -71,7 +95,7 @@ def _slope(t, y):
     return float((t * (y - y.mean())).sum() / den) if den > 1e-9 else 0.0
 
 
-def window_features(buf):
+def _window_features_one(buf):
     """buf: list of (t, frame_features) covering ~WINDOW_S. -> np.array or None."""
     if len(buf) < 4:
         return None
@@ -94,7 +118,18 @@ def window_features(buf):
         d[-1], d.min(), d[0] - d[-1], sd, sdr, accel,
         dy[-1], _slope(t, dy), dx[-1], el[-1], _slope(t, el),
         ttc, float(np.std(d - fit)), float(cf.mean()), fo[-1], _slope(t, fo),
+        *_stop_estimate(t, d),
     ], np.float32)
+
+
+def window_features(buf):
+    """Long (1.0 s) + short (0.4 s) window features, concatenated."""
+    long_ = _window_features_one(buf)
+    if long_ is None:
+        return None
+    short_buf = [b for b in buf if b[0] >= buf[-1][0] - SHORT_S]
+    short = _window_features_one(short_buf) if len(short_buf) >= 4 else long_
+    return np.concatenate([long_, short])
 
 
 class FeatureStream:
@@ -183,12 +218,12 @@ class RuleModel:
 
     def prob(self, X):
         X = np.atleast_2d(X)
-        i = {n: k for k, n in enumerate(FEATURE_NAMES)}
-        near = X[:, i["d_last"]] < 1.4
-        approaching = X[:, i["slope_d_recent"]] < -1.0
-        soon = X[:, i["ttc"]] < 0.6
-        not_above = X[:, i["dy_last"]] > -0.35   # hand going to eyes/hair stays above the mouth
-        steady = X[:, i["jitter"]] < 0.08
+        i = F
+        near = X[:, i["d_last_S"]] < 1.4
+        approaching = X[:, i["slope_d_recent_S"]] < -1.0
+        soon = X[:, i["ttc_S"]] < 0.6
+        not_above = X[:, i["dy_last_S"]] > -0.35   # hand going to eyes/hair stays above the mouth
+        steady = X[:, i["jitter_S"]] < 0.08
         return (near & approaching & soon & not_above & steady).astype(np.float32)
 
 
@@ -234,7 +269,7 @@ class IntakeDetector:
         if self.state == "idle":
             self.hits = self.hits + 1 if p >= self.thr else 0
             if self.hits >= self.consec and is_armed:
-                ttc = float(x[FEATURE_NAMES.index("ttc")])
+                ttc = float(x[F["ttc_S"]])
                 events.append({"type": "intake_start", "confidence": round(p, 3),
                                "lead_ms": int(ttc * 1000)})
                 self.state = "fired"
