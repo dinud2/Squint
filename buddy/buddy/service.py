@@ -19,6 +19,7 @@ from .bottle_service import BottleService
 from .camera import Camera
 from .coordinator import Coordinator
 from .faces import FaceID
+from .journal import Journal
 from .presence import Presence
 from .store import Store
 
@@ -82,7 +83,7 @@ def main():
 
     hub = Hub()
     bottles = BottleService(hub, a.bottle_mode)
-    coord = Coordinator(hub, Store(), a.announce)
+    coord = Coordinator(hub, Store(), a.announce, journal=Journal())
     serve(hub, a.port, bottles, coord)
     print(f"[buddy] API on :{a.port}", flush=True)
     loops = []
