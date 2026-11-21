@@ -8,3 +8,4 @@ vision/data/
 # ...except the two the station runs (the Pi can't run torch to regenerate them)
 !vision/models/movenet_lightning.onnx
 !vision/models/bottle_embed.onnx
+*.blend1
