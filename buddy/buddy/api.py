@@ -6,7 +6,8 @@
                      Poll this (e.g. once a second from the ESP32).
     GET /events   -> Server-Sent Events: one `data: {json}` line per event, as it happens.
                      Starts with the current state so a client never misses who is there.
-    GET /health   -> {"ok": true, "camera_age_s": ...}
+    GET /health   -> {"ok": true, "camera_age_s": ..., "warnings": [...], "faces": {...}, "bottles": {...},
+                      "voice": {...}, "clients": [...]}   what each part last did (buddy/diag.py)
 
     POST /tab5/frame, /bottles/enroll?name=, /bottles/reset?name=, GET /bottles
                   -> bottle recognition for the Tab5 camera, see buddy/bottle_service.py
@@ -33,6 +34,7 @@ import time
 from urllib.parse import parse_qs, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .diag import Diag
 from .insights import insights
 
 
@@ -44,6 +46,7 @@ class Hub:
         self.subscribers = []
         self.listeners = []          # in-process callbacks (the coordinator)
         self.last_frame_t = 0.0
+        self.diag = Diag()           # what each part last did (GET /health)
 
     def publish(self, event):
         event = {**event, "time": time.time()}
@@ -140,6 +143,7 @@ def make_handler(hub, bottles=None, coord=None):
                     return self._json(st.medications())
                 if u.path == "/today":
                     return self._json(st.today())
+                hub.diag.polled(self.client_address[0], self.headers.get("User-Agent"))
                 seq, lines = coord.tab5.after(int(q.get("after", 0)), float(q.get("wait", 0)))
                 return self._json({"seq": seq, "lines": lines})
             if u.path == "/cams":                   # both camera streams side by side
@@ -161,7 +165,7 @@ def make_handler(hub, bottles=None, coord=None):
                 self._json(bottles.info())
             elif self.path.startswith("/health"):
                 age = time.time() - hub.last_frame_t if hub.last_frame_t else None
-                self._json({"ok": age is not None and age < 5, "camera_age_s": age})
+                self._json({"ok": age is not None and age < 5, "camera_age_s": age, **hub.diag.report()})
             elif self.path.startswith("/events"):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")

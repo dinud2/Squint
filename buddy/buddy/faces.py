@@ -31,6 +31,7 @@ class FaceID:
         """det_scale < 1 finds faces on a shrunken frame (0.5 -> ~4x less work on the Pi);
         boxes and landmarks are scaled back, so alignment still uses the full-res frame."""
         self.det_scale = det_scale
+        self.last_raw = 0
         self.det = cv2.FaceDetectorYN.create(DET_MODEL, "", (320, 320), DET_SCORE, 0.3, 5000)
         self.rec = cv2.FaceRecognizerSF.create(REC_MODEL, "")
         self.gallery_dir = gallery_dir
@@ -44,6 +45,7 @@ class FaceID:
         h, w = img.shape[:2]
         self.det.setInputSize((w, h))
         _, faces = self.det.detect(img)
+        self.last_raw = 0 if faces is None else len(faces)      # before the size filter (diagnostics)
         if faces is None:
             return []
         faces = faces.copy()
