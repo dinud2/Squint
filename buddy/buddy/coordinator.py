@@ -88,7 +88,7 @@ class Coordinator:
             t = ev.get("type")
             if t == "people_present":
                 self.on_people(ev["people"])
-            elif t == "bottle_picked":
+            elif t in ("bottle_picked", "bottle_shown"):
                 self.on_bottle(ev["bottle"])
             elif t == "intake":
                 self.on_intake(ev.get("person"), ev.get("confidence", 0.0))

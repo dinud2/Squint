@@ -1,12 +1,14 @@
-"""Enrol a pill bottle from the counter camera (the Logitech pointing down).
+"""Enrol a pill bottle from the bottle camera (the Brio on the Pi).
 
-    python tools/enroll_bottle.py --name tylenol
-    python tools/enroll_bottle.py --name _other      # cups, water bottles, hands, the empty counter
+    python tools/enroll_bottle.py --name tylenol --reset
+    python tools/enroll_bottle.py --name _other         # anything that is not a medicine
 
-Put the bottle on the counter under the camera. After the countdown it takes --shots photos
-(the Pi uses its newest camera frame each time); move the bottle around a little and turn it
-between shots so it learns several positions and sides. The name must match the medication id
-(GET /medications).
+Hold the bottle up in front of the bottle camera, filling the middle of the picture, the way
+it will be shown in use. After the countdown it takes --shots photos (the Pi uses its newest
+camera frame each time); turn the bottle a little and move it slightly between shots. The
+name must match the medication id (GET /medications).
+For _other: show the empty view, your hand, your face, a cup, a water bottle (anything that
+is NOT a medicine), a few shots each.
 """
 import argparse
 import json
@@ -35,7 +37,7 @@ def main():
     if a.reset:
         print(post(f"/bottles/reset?name={a.name}"))
     for i in range(5, 0, -1):
-        print(f"put {a.name} under the camera... {i}", flush=True)
+        print(f"hold {a.name} up to the camera... {i}", flush=True)
         time.sleep(1)
     ok = 0
     for i in range(a.shots):

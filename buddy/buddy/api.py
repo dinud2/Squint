@@ -81,8 +81,13 @@ CAMS_PAGE = """<!doctype html>
   figure { margin: 0; flex: 1 1 420px; min-width: 0; }
   figcaption { padding: 6px 2px; color: #999; } figcaption b { color: #eee; }
   img { width: 100%; height: auto; display: block; background: #000; border-radius: 6px; }
+  .wrap { position: relative; }
+  .guide { position: absolute; left: 18%; top: 8%; width: 64%; height: 84%;
+           border: 2px dashed rgba(255,255,255,.55); border-radius: 8px; pointer-events: none; }
+  .guide span { position: absolute; top: 6px; left: 8px; font-size: 13px; color: rgba(255,255,255,.75); }
 </style></head><body><div class="row">
-  <figure><figcaption><b>Bottles</b> &middot; Brio 101 &middot; :8080</figcaption><img id="b" alt="bottle camera"></figure>
+  <figure><figcaption><b>Bottles</b> &middot; Brio 101 &middot; :8080</figcaption>
+    <div class="wrap"><img id="b" alt="bottle camera"><div class="guide"><span>hold the bottle here</span></div></div></figure>
   <figure><figcaption><b>Faces</b> &middot; C270 &middot; :8082</figcaption><img id="f" alt="face camera"></figure>
 </div><script>
   const h = location.hostname;

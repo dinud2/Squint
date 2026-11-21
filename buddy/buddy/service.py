@@ -69,7 +69,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bottle-source", default="http://localhost:8080/stream",
                     help="camera looking down at the counter ('' = only frames POSTed to /tab5/frame)")
-    ap.add_argument("--bottle-fps", type=float, default=2.0)
+    ap.add_argument("--bottle-fps", type=float, default=4.0)
+    ap.add_argument("--bottle-mode", choices=("show", "counter"), default="show",
+                    help="show: bottle held up to the camera; counter: bottles stand under it")
     ap.add_argument("--face-source", default="", help="camera looking at the person ('' = off)")
     ap.add_argument("--port", type=int, default=8081)
     ap.add_argument("--det-scale", type=float, default=0.5, help="detect faces on a smaller frame (faster)")
@@ -79,7 +81,7 @@ def main():
     a = ap.parse_args()
 
     hub = Hub()
-    bottles = BottleService(hub)
+    bottles = BottleService(hub, a.bottle_mode)
     coord = Coordinator(hub, Store(), a.announce)
     serve(hub, a.port, bottles, coord)
     print(f"[buddy] API on :{a.port}", flush=True)
