@@ -32,7 +32,7 @@ def load_clips(folder):
     for f in sorted(glob.glob(os.path.join(folder, "*.npz"))):
         z = np.load(f, allow_pickle=True)
         meta = json.loads(str(z["meta"]))
-        seqs.append({"t": z["t"], "kps": z["kps"], "armed": z["armed"], **meta})
+        seqs.append({"t": z["t"], "kps": z["kps"], "armed": z["armed"], **meta, "real": True})
     return seqs
 
 
@@ -65,11 +65,15 @@ def labels(seq, T):
     return y, w
 
 
-def build(seqs):
+def build(seqs, real_weight=1.0):
+    """real_weight multiplies the loss weight of windows from recorded clips: a few dozen
+    real clips would otherwise be drowned out by ~2000 simulated sequences."""
     Xs, ys, ws, traces = [], [], [], []
     for s in seqs:
         T, X, D = trace(s)
         y, w = labels(s, T)
+        if s.get("real"):
+            w = w * real_weight
         Xs.append(X); ys.append(y); ws.append(w)
         traces.append((T, X, D))
     return np.concatenate(Xs), np.concatenate(ys), np.concatenate(ws), traces
@@ -207,6 +211,7 @@ def main():
     ap.add_argument("--n_train", type=int, default=2000)
     ap.add_argument("--n_val", type=int, default=600)
     ap.add_argument("--n_test", type=int, default=1500)
+    ap.add_argument("--clip_weight", type=float, default=20.0, help="loss weight of real-clip windows vs sim")
     a = ap.parse_args()
     t0 = time.time()
     train_s, val_s, test_s = [], [], []
@@ -217,13 +222,20 @@ def main():
     if a.clips:
         clips = load_clips(a.clips)
         rng = np.random.default_rng(0)
-        idx = rng.permutation(len(clips))
-        n1, n2 = int(0.6 * len(clips)), int(0.8 * len(clips))
-        train_s += [clips[i] for i in idx[:n1]]
-        val_s += [clips[i] for i in idx[n1:n2]]
-        test_s += [clips[i] for i in idx[n2:]]
+        # split each movement kind 60/20/20 so every kind shows up in val and test
+        for kind in sorted({c["kind"] for c in clips}):
+            ks = [c for c in clips if c["kind"] == kind]
+            idx = rng.permutation(len(ks))
+            n_te = max(1, round(0.2 * len(ks))) if len(ks) >= 3 else 0
+            n_va = max(1, round(0.2 * len(ks))) if len(ks) >= 3 else 0
+            test_s += [ks[i] for i in idx[:n_te]]
+            val_s += [ks[i] for i in idx[n_te:n_te + n_va]]
+            train_s += [ks[i] for i in idx[n_te + n_va:]]
+        print("real clips train/val/test =",
+              sum(bool(s.get("real")) for s in train_s), sum(bool(s.get("real")) for s in val_s),
+              sum(bool(s.get("real")) for s in test_s))
     print(f"sequences train/val/test = {len(train_s)}/{len(val_s)}/{len(test_s)}  ({time.time()-t0:.1f}s)")
-    Xtr, ytr, wtr, _ = build(train_s)
+    Xtr, ytr, wtr, _ = build(train_s, a.clip_weight)
     _, _, _, tr_val = build(val_s)
     _, _, _, tr_test = build(test_s)
     print(f"train windows {len(Xtr)} (positives {int(ytr.sum())})  ({time.time()-t0:.1f}s)")
@@ -242,6 +254,12 @@ def main():
         rt = seq_score(test_s, tr_test, probs, thr, consec)
         rt_nogate = seq_score(test_s, tr_test, probs, thr, consec, gate=False)
         results[name] = {"threshold": thr, "consec": consec, "val": rv, "test": rt, "test_no_bottle_gate": rt_nogate}
+        real = [i for i, s in enumerate(test_s) if s.get("real")]
+        if real:   # the numbers that matter: recorded at the station, never trained on
+            rr = seq_score([test_s[i] for i in real], [tr_test[i] for i in real], [probs[i] for i in real], thr, consec)
+            results[name]["test_real"] = rr
+            print(f"        REAL test clips: catch={rr['catch_rate']:.3f} fa={rr['false_alarm_rate']:.3f}"
+                  f" fa_armed={rr['fa_armed']:.3f} lead_med={rr['lead_ms_median']}ms  {rr['by_kind']}")
         print(f"{name:7s} thr={thr:.2f} consec={consec} | VAL catch={rv['catch_rate']:.3f} fa={rv['false_alarm_rate']:.3f}"
               f" | TEST catch={rt['catch_rate']:.3f} fa={rt['false_alarm_rate']:.3f} fa_armed={rt['fa_armed']:.3f} lead_med={rt['lead_ms_median']}ms"
               f" p10={rt['lead_ms_p10']}ms | no-gate fa={rt_nogate['false_alarm_rate']:.3f}")
@@ -254,7 +272,8 @@ def main():
     win = max(learned, key=lambda k: val_obj(learned[k]))
     spec = dict(candidates[win])
     spec.update({"threshold": results[win]["threshold"], "consec": results[win]["consec"],
-                 "trained_on": {"sim": bool(a.sim or not a.clips), "clips": a.clips}})
+                 "trained_on": {"sim": bool(a.sim or not a.clips), "clips": a.clips,
+                                "clip_weight": a.clip_weight if a.clips else None}})
     os.makedirs(os.path.join(HERE, "models"), exist_ok=True)
     with open(I.MODEL_FILE, "w") as f:
         json.dump(spec, f)

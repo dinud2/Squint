@@ -32,7 +32,8 @@ def main():
     for path in sorted(glob.glob(os.path.join(a.clips, "*.mp4"))):
         meta = json.load(open(path[:-4] + ".json"))
         cap = cv2.VideoCapture(path)
-        fps = cap.get(cv2.CAP_PROP_FPS) or 15
+        # the recorder stores the measured rate; mp4 containers can round it
+        fps = float(meta.get("fps") or cap.get(cv2.CAP_PROP_FPS) or 15)
         T, K = [], []
         while True:
             ok, fr = cap.read()
