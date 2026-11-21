@@ -9,10 +9,19 @@
     POST /tab5/frame, /bottles/enroll?name=, /bottles/reset?name=, GET /bottles
                   -> bottle recognition for the Tab5 camera, see buddy/bottle_service.py
 
+    iOS app (docs/api-contract.md): GET/POST /people, GET/POST /medications,
+                  PUT/DELETE /medications/{id}, GET /today
+    Tab5:         GET /tab5/commands?after=<seq>&wait=20 -> {"seq": n, "lines": [...]}
+                  (Kathy's format; pass each line to handleCommand())
+                  POST /doses/confirm {"med", "for", "taken": true|false}  ("Did you take it?")
+    Testing:      POST /intake {"person", "confidence"}  (until hand-to-mouth is built)
+
 Events (all have "type" and "time"):
     people_present   {"people": [...], "unknown": n, "seq": n}
     bottle_picked    {"bottle": "tylenol", "how": "lifted"|"gone"}
     bottle_returned  {"bottle": "tylenol"}
+    say              {"text": ...}                       (also sent to the Nest)
+    dose_taken       {"med", "for", "at", "how": "tab5"|"auto"}
 """
 import json
 import queue
@@ -28,6 +37,7 @@ class Hub:
         self.state = {"type": "people_present", "people": [], "unknown": 0, "since": time.time(), "seq": 0,
                       "time": time.time()}
         self.subscribers = []
+        self.listeners = []          # in-process callbacks (the coordinator)
         self.last_frame_t = 0.0
 
     def publish(self, event):
@@ -44,6 +54,8 @@ class Hub:
             except queue.Full:
                 pass
         print("[event]", json.dumps(event), flush=True)
+        for fn in list(self.listeners):
+            fn(event)
 
     def subscribe(self):
         q = queue.Queue(maxsize=100)
@@ -59,7 +71,7 @@ class Hub:
                 self.subscribers.remove(q)
 
 
-def make_handler(hub, bottles=None):
+def make_handler(hub, bottles=None, coord=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -73,7 +85,29 @@ def make_handler(hub, bottles=None):
             self.end_headers()
             self.wfile.write(body)
 
+        def _body(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            return self.rfile.read(n) if n else b""
+
+        def _jbody(self):
+            try:
+                return json.loads(self._body() or b"{}")
+            except ValueError:
+                return None
+
         def do_GET(self):
+            u = urlparse(self.path)
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            if coord is not None and u.path in ("/people", "/medications", "/today", "/tab5/commands"):
+                st = coord.store
+                if u.path == "/people":
+                    return self._json(st.people())
+                if u.path == "/medications":
+                    return self._json(st.medications())
+                if u.path == "/today":
+                    return self._json(st.today())
+                seq, lines = coord.tab5.after(int(q.get("after", 0)), float(q.get("wait", 0)))
+                return self._json({"seq": seq, "lines": lines})
             if self.path.startswith("/state"):
                 with hub.lock:
                     s = dict(hub.state)
@@ -107,12 +141,24 @@ def make_handler(hub, bottles=None):
                 self._json({"error": "not found", "endpoints": ["/state", "/events", "/health", "/bottles"]}, 404)
 
         def do_POST(self):
-            if bottles is None:
-                return self._json({"error": "bottle recognition is not running"}, 503)
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
-            n = int(self.headers.get("Content-Length") or 0)
-            body = self.rfile.read(n) if n else b""
+            if coord is not None and u.path in ("/people", "/medications", "/doses/confirm", "/intake"):
+                b = self._jbody()
+                if b is None:
+                    return self._json({"error": "body must be JSON"}, 400)
+                if u.path == "/people":
+                    return self._json(coord.store.add_person(b), 201)
+                if u.path == "/medications":
+                    return self._json(coord.store.add_med(b), 201)
+                if u.path == "/intake":
+                    hub.publish({"type": "intake", "person": b.get("person"), "confidence": float(b.get("confidence", 0))})
+                    return self._json({"ok": True})
+                r = coord.confirm(b.get("med"), b.get("for"), bool(b.get("taken", True)))
+                return self._json(r, 400 if "error" in r else 200)
+            if bottles is None:
+                return self._json({"error": "bottle recognition is not running"}, 503)
+            body = self._body()
             try:
                 if u.path == "/tab5/frame":
                     self._json(bottles.frame(body))
@@ -126,11 +172,38 @@ def make_handler(hub, bottles=None):
                                 "endpoints": ["/tab5/frame", "/bottles/enroll?name=", "/bottles/reset?name="]}, 404)
             except Exception as e:          # never take the server down on one bad request
                 self._json({"error": repr(e)}, 500)
+        def do_PUT(self):
+            u = urlparse(self.path)
+            if coord is not None and u.path.startswith("/medications/"):
+                b = self._jbody()
+                if b is None:
+                    return self._json({"error": "body must be JSON"}, 400)
+                m = coord.store.put_med(u.path.split("/")[2], b)
+                return self._json(m) if m else self._json({"error": "no such medication"}, 404)
+            self._json({"error": "not found"}, 404)
+
+        def do_DELETE(self):
+            u = urlparse(self.path)
+            if coord is not None and u.path.startswith("/medications/"):
+                if coord.store.delete_med(u.path.split("/")[2]):
+                    self.send_response(204)
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    return
+                return self._json({"error": "no such medication"}, 404)
+            self._json({"error": "not found"}, 404)
+
+        def do_OPTIONS(self):                      # CORS preflight (web tools)
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.end_headers()
     return Handler
 
 
-def serve(hub, port=8081, bottles=None):
-    srv = ThreadingHTTPServer(("0.0.0.0", port), make_handler(hub, bottles))
+def serve(hub, port=8081, bottles=None, coord=None):
+    srv = ThreadingHTTPServer(("0.0.0.0", port), make_handler(hub, bottles, coord))
     srv.daemon_threads = True
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv

@@ -11,6 +11,8 @@ import time
 from .api import Hub, serve
 from .bottle_service import BottleService
 from .camera import Camera
+from .coordinator import Coordinator
+from .store import Store
 from .faces import FaceID
 from .presence import Presence
 
@@ -22,11 +24,14 @@ def main():
     ap.add_argument("--det-scale", type=float, default=0.5, help="detect faces on a smaller frame (faster)")
     ap.add_argument("--verbose", action="store_true", help="print every frame's result")
     ap.add_argument("--no-faces", action="store_true", help="bottle API only (no counter camera)")
+    ap.add_argument("--announce", default=None,
+                    help="Nest voice endpoint, e.g. http://<laptop>:8765/announce (home/server.py)")
     a = ap.parse_args()
 
     hub, presence = Hub(), Presence()
     bottles = BottleService(hub)
-    serve(hub, a.port, bottles)
+    coord = Coordinator(hub, Store(), a.announce)
+    serve(hub, a.port, bottles, coord)
     print(f"[buddy] bottles {bottles.info()['bottles']}; API on :{a.port}", flush=True)
     if a.no_faces:
         while True:
