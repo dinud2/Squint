@@ -57,6 +57,9 @@ final class AppStore {
             async let t = api.today()
             var ppl = try await p
             for i in ppl.indices { ppl[i].photo = photos[ppl[i].id] }
+            if ppl.map(\.name) != people.map(\.name) {
+                SquintShortcuts.updateAppShortcutParameters()   // so Siri knows the names
+            }
             people = ppl
             medications = try await m
             doses = try await t
