@@ -6,6 +6,15 @@ serves everything over HTTP on port **8081**.
 
 It is pure Python + OpenCV + NumPy. The HTTP server is the standard library's, so it runs on QNX.
 
+**On a laptop**, install into a venv. Use OpenCV 4: OpenCV 5 crashes in face alignment.
+
+```bash
+cd buddy && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m buddy.service --bottle-source 0 --face-source 0     # 0 = the laptop webcam
+```
+
+A source can also be a video file (it loops), handy for testing without a camera.
+
 ## Run
 
 ```bash

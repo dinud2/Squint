@@ -1,0 +1,4 @@
+# For running the backend and enrolment tools on a laptop. The Pi uses QNX's own OpenCV build.
+# OpenCV 5 crashes in FaceRecognizerSF.alignCrop (face alignment), so stay on 4.x.
+opencv-python>=4.8,<5
+numpy
