@@ -5,3 +5,6 @@ __pycache__/
 # big / regenerable: run vision/tools/export_models.py
 vision/models/*.onnx
 vision/data/
+# ...except the two the station runs (the Pi can't run torch to regenerate them)
+!vision/models/movenet_lightning.onnx
+!vision/models/bottle_embed.onnx
