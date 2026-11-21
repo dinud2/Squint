@@ -96,11 +96,6 @@ struct InsightCard: View {
             }
         }
         .paperCard()
-        .overlay(alignment: .topTrailing) {
-            if insight.level == .talk || insight.level == .watch {
-                Capsule().fill(insight.level.color).frame(width: 36, height: 4).padding(.top, 10).padding(.trailing, 26)
-            }
-        }
     }
 
     private var header: some View {
@@ -155,7 +150,7 @@ struct SteadinessRing: View {
                 .rotationEffect(.degrees(-90))
             VStack(spacing: -2) {
                 Text(value.map(String.init) ?? "–").font(Theme.display(17)).foregroundStyle(Theme.ink)
-                Text("steady").font(.system(size: 8, weight: .bold, design: .rounded)).foregroundStyle(Theme.muted)
+                Text("of 100").font(.system(size: 8, weight: .bold, design: .rounded)).foregroundStyle(Theme.muted)
             }
         }
         .frame(width: 54, height: 54)
@@ -170,6 +165,8 @@ struct TimingChart: View {
 
     var body: some View {
         let pts = insight.daily.filter { $0.lateMin != nil }
+        let lates = pts.compactMap(\.lateMin) + [insight.usualLate ?? 0]
+        let lo = min(0, (lates.min() ?? 0) - 5), hi = max(30, (lates.max() ?? 0) + 10)
         VStack(alignment: .leading, spacing: 6) {
             Text("How late, each day").font(.caption.weight(.bold)).foregroundStyle(Theme.muted)
             Chart {
@@ -197,6 +194,7 @@ struct TimingChart: View {
                         .symbolSize(40)
                 }
             }
+            .chartYScale(domain: lo...hi)
             .chartYAxis {
                 AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { v in
                     AxisGridLine().foregroundStyle(Theme.line)
