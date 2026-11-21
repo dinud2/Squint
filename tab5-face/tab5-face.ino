@@ -1,8 +1,8 @@
 // tab5-face.ino - Otto-eyes companion face for a landscape M5Stack Tab5 (the C270 sits on top).
 //
 // Screen (1280 x 720, landscape):
-//   - Face zone (top 440 px): eyes drawn in code at up to 60 Hz, coloured per reaction.
-//   - Text zone (below): a few big words.
+//   - The whole screen is the face: eyes drawn in code at up to 60 Hz, coloured per
+//     reaction, centred. (No text panel: TextPanel.h is no longer used.)
 //
 // Sleep and wake:
 //   - It sleeps by default (closed eyes, dim screen).
@@ -38,7 +38,6 @@
 
 #include "OttoFace.h"
 #include "Reactions.h"
-#include "TextPanel.h"
 #include "Voice.h"
 #if defined(ARDUINO)
 #include "PiLink.h"  // Wi-Fi commands from the Pi (docs/tab5-pi.md)
@@ -49,7 +48,6 @@
 struct Defaults;
 
 face::OttoFace ottoFace;
-text::TextPanel textPanel;
 
 // ---- Voice -------------------------------------------------------------------
 // Plays a clip from the audio pack. A missing clip is silent.
@@ -146,6 +144,22 @@ static void updateDemo() {
   react(s.reaction, s.title, s.detail, s.clip);
   if (++demoIndex >= kDemoSteps) demoIndex = -1;
 }
+
+// ---- Cycle mode (build with -DFACE_CYCLE): shows every expression in turn, silently ----
+#if defined(FACE_CYCLE)
+static void updateCycle() {
+  static uint32_t nextMs = 0;
+  static int i = 0;
+  const uint32_t now = lgfx::millis();
+  if ((int32_t)(now - nextMs) < 0) return;
+  nextMs = now + 5000;  // 5 s per expression
+  const Reaction r = (Reaction)(i++ % 8);
+  reactions::set(r, "", "", 60000);  // long hold: the cycle, not the timers, moves it on
+#if defined(ARDUINO)
+  Serial.printf("[cycle] %s\n", reactions::name(r));
+#endif
+}
+#endif
 
 // ---- Input -------------------------------------------------------------------
 static bool reactionFromName(const char* name, Reaction* out) {
@@ -254,8 +268,8 @@ void setup() {
   M5.Display.fillScreen(face::kBackground);
   voice::begin();
 
-  // Both need PSRAM (about 0.7 MB + 0.9 MB + 1 MB).
-  if (!ottoFace.begin() || !textPanel.begin()) {
+  // Needs PSRAM (the full-screen face canvas alone is 1.8 MB).
+  if (!ottoFace.begin()) {
     M5.Display.setTextColor(TFT_RED);
     M5.Display.setFont(&fonts::DejaVu40);
     M5.Display.drawString("Enable PSRAM", 40, 40);
@@ -276,9 +290,11 @@ void loop() {
 #endif
   readTouch();
   updateDemo();
+#if defined(FACE_CYCLE)
+  updateCycle();
+#endif
   reactions::tick();
   updateBrightness();
   ottoFace.update();
-  textPanel.update();
   lgfx::delay(1);  // the face paces itself at 60 Hz; a longer wait here capped it near 50 fps
 }

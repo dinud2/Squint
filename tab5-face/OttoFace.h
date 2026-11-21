@@ -4,7 +4,7 @@
 // anti-aliased shapes every frame instead of played from GIFs, so motion is fluid:
 // blinks, glances, bounces and heartbeats are computed per frame, and changing
 // expression is a quick blink (close the old eyes, open the new ones).
-// Minimal on purpose: just the eyes and the words.
+// Minimal on purpose: just the eyes, filling the whole screen.
 //
 // Only the eyes: no frames, boxes or symbols around them.
 //   idle       round eyes that glance around and blink          white
@@ -31,10 +31,11 @@ namespace face {
 // ---- Layout (screen pixels, landscape 1280 x 720; the C270 sits on top) -----
 constexpr int kWidth = 1280;
 constexpr int kHeight = 720;
-constexpr int kFaceBottom = 440;  // Face zone is y 0 .. 440 (text panel below).
-constexpr float kEyeSize = 240.0f;     // Eye diameter.
-constexpr float kEyeGap = 430.0f;      // Distance between eye centres.
-constexpr float kEyeY = 225.0f;        // Eye centre height.
+constexpr int kFaceBottom = kHeight;  // The face fills the whole screen (no text panel).
+constexpr float kEyeSize = 360.0f;     // Eye diameter.
+constexpr float kEyeGap = 620.0f;      // Distance between eye centres.
+constexpr float kEyeY = kHeight / 2.0f;  // Eye centre height: centred on the screen.
+constexpr float kScale = kEyeSize / 240.0f;  // line widths and motion were tuned at 240 px eyes
 constexpr uint32_t kFrameUs = 16667;   // 60 Hz.
 
 // The panel is portrait in memory (720 x 1280). Pushing in a landscape rotation made M5GFX
@@ -43,7 +44,7 @@ constexpr uint32_t kFrameUs = 16667;   // 60 Hz.
 // (logical) points to portrait (physical) ones with T(). Set kFlip if it shows upside down.
 constexpr bool kFlip = false;
 constexpr int kPanelW = 720;                    // physical (portrait) width
-constexpr int kCanvasW = kFaceBottom;           // face canvas, physical: 440 x 1280
+constexpr int kCanvasW = kFaceBottom;           // face canvas, physical: 720 x 1280 (full panel)
 constexpr int kCanvasH = kWidth;
 constexpr int kCanvasX = kFlip ? 0 : kPanelW - kFaceBottom;  // physical x of the face canvas
 
@@ -85,6 +86,10 @@ inline float easeOutBack(float x) {
 }
 inline float frand(float a, float b) { return a + (b - a) * (float)(rand() % 10000) / 10000.0f; }
 constexpr float kPi = 3.14159265f;
+// Slow vertical float so the face never sits still: amp px (at 240 px eyes), hz cycles/s.
+inline float bob(float t, float amp, float hz, float phase = 0) {
+  return amp * kScale * sinf(t * 2 * kPi * hz + phase);
+}
 
 // ---- Renderer ----------------------------------------------------------------
 class OttoFace {
@@ -389,7 +394,7 @@ class OttoFace {
     if (glance && (int32_t)(now - nextGlanceMs_) >= 0) {
       const bool center = (rand() % 3) == 0;
       gazeTX_ = center ? 0 : frand(-1, 1);
-      gazeTY_ = center ? 0 : frand(-0.6f, 0.6f);
+      gazeTY_ = center ? 0 : frand(-1, 1);
       nextGlanceMs_ = now + (uint32_t)frand(1400, 3800);
     }
     if (!glance) gazeTX_ = gazeTY_ = 0;
@@ -454,7 +459,7 @@ class OttoFace {
       case Reaction::Idle: {
         updateIdleMotion(dt, now, true);
         const float o = blinkOpen(now) * (0.08f + 0.92f * grow);
-        const float gx = gazeX_ * 46, gy = gazeY_ * 22;
+        const float gx = gazeX_ * 60 * kScale, gy = gazeY_ * 48 * kScale + bob(t, 10, 0.3f);
         for (float x : {lx, rx}) {
           if (o > 0.995f)
             stamp(key(1, (uint32_t)r), (int)D + 16, x + gx, kEyeY + gy,
@@ -465,7 +470,7 @@ class OttoFace {
         break;
       }
       case Reaction::Greeting: {  // ^^ crescents
-        const float s = D * pop, y = kEyeY - 10 + 7 * sinf(t * 2 * kPi * 1.1f);
+        const float s = D * pop, y = kEyeY - 10 * kScale - 22 * kScale * fabsf(sinf(t * kPi * 1.1f));  // happy hops
         auto crescent = [&](float px, float py) {
           disc(px, py, s / 2, c);
           disc(px, py + s * 0.34f, s * 0.47f, kBackground);
@@ -479,17 +484,19 @@ class OttoFace {
       case Reaction::Reminder: {  // one eye + wink, sparkle
         updateIdleMotion(dt, now, false);
         const float o = blinkOpen(now) * (0.08f + 0.92f * grow);
+        const float kEyeY = face::kEyeY + bob(t, 16, 0.5f);  // bobbing, to catch the eye
         if (o > 0.995f) stamp(key(1, (uint32_t)r), (int)D + 16, lx, kEyeY, [&](float px, float py) { blob(px, py, D, D, c); });
         else blob(lx, kEyeY, D, D * o, c);
         if (pop >= 1)
-          stamp(key(3), (int)D + 60, rx, kEyeY + D * 0.28f,
-                [&](float px, float py) { stroke(px, py, D * 0.42f, 215, 325, 26, c); });
+          stamp(key(3), (int)(D + 60 * kScale), rx, kEyeY + D * 0.28f,
+                [&](float px, float py) { stroke(px, py, D * 0.42f, 215, 325, 26 * kScale, c); });
         else
-          stroke(rx, kEyeY + D * 0.28f, D * 0.42f * pop, 215, 325, 26, c);
+          stroke(rx, kEyeY + D * 0.28f, D * 0.42f * pop, 215, 325, 26 * kScale, c);
         break;
       }
-      case Reaction::Happy: {  // hearts with a heartbeat
+      case Reaction::Happy: {  // hearts with a heartbeat, floating up and down
         const float beat = powf(fabsf(sinf(t * kPi * 1.25f)), 6.0f);  // 0..1
+        const float kEyeY = face::kEyeY + bob(t, 16, 0.45f);
         if (open < 1) {  // popping in: draw live at any size (only for ~170 ms)
           const float s = D * 1.08f * pop;
           heart(lx, kEyeY, s, c);
@@ -509,6 +516,7 @@ class OttoFace {
       }
       case Reaction::Concerned: {  // tall eye + half-closed eye, "?"
         updateIdleMotion(dt, now, false);
+        const float kEyeY = face::kEyeY + bob(t, 12, 0.3f);
         const float o = blinkOpen(now) * (0.08f + 0.92f * grow);
         if (o > 0.995f)
           stamp(key(5), (int)(D * 1.1f) + 16, lx, kEyeY, [&](float px, float py) { blob(px, py, D * 0.78f, D * 1.08f, c); });
@@ -526,8 +534,8 @@ class OttoFace {
         break;
       }
       case Reaction::Stop: {  // ring eyes
-        const float w = D * 0.86f * pop, h = D * 1.02f * pop, th = 30 * pop;
-        const float wob = 2.5f * sinf(t * 2 * kPi * 7.0f);
+        const float w = D * 0.86f * pop, h = D * 1.02f * pop, th = 30 * kScale * pop;
+        const float wob = 2.5f * kScale * sinf(t * 2 * kPi * 7.0f);
         auto ring = [&](float px, float py) {
           blob(px, py, w, h, c);
           blob(px, py, w - 2 * th, h - 2 * th, kBackground);
@@ -535,18 +543,18 @@ class OttoFace {
         for (float x : {lx, rx}) {
           if (pop >= 1) stamp(key(8), (int)(D * 1.05f) + 16, x, kEyeY, ring);
           else ring(x, kEyeY);
-          disc(x + wob, kEyeY, 15 * pop, c);
+          disc(x + wob, kEyeY, 15 * kScale * pop, c);
         }
         break;
       }
       case Reaction::WrongPerson: {  // lowered eyes glancing away
-        const float ax = 26 * sinf(t * 2 * kPi * 0.35f);
+        const float ax = 34 * kScale * sinf(t * 2 * kPi * 0.35f);
         auto lowered = [&](float px, float py, float g) {
           blob(px, py, D * 0.92f, D * 0.92f, c);
           fillRectL(px - D, py - D, 2 * D, D - D * 0.46f + D * 0.5f * (1 - g), kBackground);
         };
         for (float x : {lx, rx}) {
-          const float ex = x + ax, ey = kEyeY + D * 0.1f;
+          const float ex = x + ax, ey = kEyeY + D * 0.1f + bob(t, 14, 0.35f, kPi / 2);
           if (grow >= 1) stamp(key(9), (int)D + 16, ex, ey, [&](float px, float py) { lowered(px, py, 1); });
           else lowered(ex, ey, grow);
         }
@@ -554,13 +562,13 @@ class OttoFace {
       }
       case Reaction::Sleep:
       default: {  // closed eyes, breathing, z's
-        const float y = kEyeY + 4 * sinf(t * 2 * kPi * 0.22f);
+        const float y = kEyeY + bob(t, 14, 0.22f);  // deep, slow breathing
         for (float x : {lx, rx}) {
           if (pop >= 1)
-            stamp(key(10), (int)D + 60, x, y - D * 0.32f,
-                  [&](float px, float py) { stroke(px, py, D * 0.42f, 35, 145, 22, c); });
+            stamp(key(10), (int)(D + 60 * kScale), x, y - D * 0.32f,
+                  [&](float px, float py) { stroke(px, py, D * 0.42f, 35, 145, 22 * kScale, c); });
           else
-            stroke(x, y - D * 0.32f, D * 0.42f * (0.9f + 0.1f * pop), 35, 145, 22, c);
+            stroke(x, y - D * 0.32f, D * 0.42f * (0.9f + 0.1f * pop), 35, 145, 22 * kScale, c);
         }
 
         break;
