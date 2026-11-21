@@ -57,7 +57,7 @@ class Gallery:
     on the enrolment photos (leave-one-out, 100% top-1). The scores change scale, hence the
     separate thresholds."""
     CENTER_ACCEPT = 0.50
-    CENTER_MARGIN = 0.15
+    CENTER_MARGIN = 0.08   # tuned on ~950 enrolled photos: 79% named, 0 wrong, 0 no-medicine named (0.15: 48%)
 
     def __init__(self, directory=GALLERY_DIR, center=False):
         self.dir = directory
