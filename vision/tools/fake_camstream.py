@@ -21,12 +21,30 @@ cond = threading.Condition()
 
 def producer(source, fps, quality):
     cap = None
+    is_webcam = source.isdigit()
     if source != "pattern":
-        cap = cv2.VideoCapture(int(source) if source.isdigit() else source)
-    i = 0
+        cap = cv2.VideoCapture(int(source) if is_webcam else source)
+        if not cap.isOpened():
+            print(f"!! could not open {source}. On macOS: System Settings > Privacy & Security > Camera "
+                  f"> allow your terminal app, then restart the terminal.", flush=True)
+    i, fails = 0, 0
     while True:
         t0 = time.time()
-        if cap is None:
+        if cap is not None and is_webcam:
+            ok, f = cap.read()
+            if not ok:
+                fails += 1
+                if fails in (20, 200):
+                    print(f"!! webcam {source} opened but returns no frames ({fails} tries). Usually the camera "
+                          "permission for your terminal app (System Settings > Privacy & Security > Camera), "
+                          "or another app (Zoom, FaceTime, Photo Booth) is using it.", flush=True)
+                time.sleep(0.05)
+                continue
+            if fails:
+                print("webcam frames OK", flush=True)
+                fails = 0
+            f = cv2.resize(f, (640, 480))
+        elif cap is None:
             f = np.full((480, 640, 3), 40, np.uint8)
             x = int(320 + 250 * np.sin(i / 15))
             cv2.circle(f, (x, 240), 40, (0, 200, 255), -1)
