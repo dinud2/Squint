@@ -58,9 +58,9 @@ Pick the voice with `SQUINT_VOICE=en_GB-jenny_dioco-medium` (or `"voice"` in the
 
 | Voice | Sounds like |
 |---|---|
-| `en_US-lessac-medium` (default) | clear, warm US female |
+| `en_US-lessac-medium` | clear, warm US female |
 | `en_US-amy-medium` | softer, slower US female |
-| `en_US-hfc_female-medium` | gentle US female |
+| `en_US-hfc_female-medium` (default) | gentle US female |
 | `en_GB-jenny_dioco-medium` | soft British female |
 | `en_GB-cori-high` | calm British female, higher quality |
 | `en_US-ryan-high` | calm US male |

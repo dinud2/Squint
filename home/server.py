@@ -3,7 +3,7 @@
     .venv/bin/python server.py                 # announce on the Google Nest
     .venv/bin/python server.py --local         # no Nest? play on the laptop speakers instead
 
-    POST /announce   {"text": "...", "speaker": "Bathroom speaker", "voice": "en_US-lessac-medium"}
+    POST /announce   {"text": "...", "speaker": "Bathroom speaker", "voice": "en_US-hfc_female-medium"}
                      speaker and voice are optional. Replies {"ok": true, "speaker": ..., "seconds": ...}
     GET  /speakers   Google speakers found on the Wi-Fi
     GET  /voices     voices installed in voices/

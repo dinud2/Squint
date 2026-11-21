@@ -22,7 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 VOICES = os.path.join(HERE, "voices")
 CACHE = os.path.join(HERE, "cache")
 
-DEFAULT_VOICE = os.environ.get("SQUINT_VOICE", "en_US-lessac-medium")
+DEFAULT_VOICE = os.environ.get("SQUINT_VOICE", "en_US-hfc_female-medium")
 SLOWER = 1.15            # 1.0 = normal speed, 1.15 = 15% slower
 SENTENCE_PAUSE = 0.45    # seconds of silence between sentences
 
