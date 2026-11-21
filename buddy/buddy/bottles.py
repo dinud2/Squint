@@ -38,6 +38,39 @@ class Embedder:
         return v / (np.linalg.norm(v) + 1e-8)
 
 
+class Classifier:
+    """The bottle classifier trained on the laptop (tools/train_bottle_classifier.py), run with
+    cv2.dnn. Same preprocessing as training: the box crop resized to 224x224, RGB, ImageNet
+    normalisation. -> {class: probability}."""
+    MODEL = os.path.join(HERE, "models", "bottle_classifier.onnx")
+    META = os.path.join(HERE, "models", "bottle_classes.json")
+
+    @classmethod
+    def available(cls):
+        return os.path.exists(cls.MODEL) and os.path.exists(cls.META)
+
+    def __init__(self):
+        import json
+        with open(self.META) as f:
+            meta = json.load(f)
+        self.classes = meta["classes"]
+        self.size = int(meta.get("size", 224))
+        self.mean = np.array(meta.get("mean", MEAN), np.float32)
+        self.std = np.array(meta.get("std", STD), np.float32)
+        self.net = cv2.dnn.readNet(self.MODEL)
+
+    def __call__(self, crop_bgr):
+        img = cv2.resize(crop_bgr, (self.size, self.size), interpolation=cv2.INTER_AREA)[:, :, ::-1]
+        x = ((img.astype(np.float32) / 255.0 - self.mean) / self.std).transpose(2, 0, 1)[None]
+        self.net.setInput(np.ascontiguousarray(x))
+        z = np.asarray(self.net.forward()).reshape(-1).astype(np.float64)
+        if not np.all(np.isfinite(z)):
+            return {}
+        p = np.exp(z - z.max())
+        p /= p.sum()
+        return {c: float(v) for c, v in zip(self.classes, p)}
+
+
 def crop(frame, box, pad=0.10):
     """Detector box -> crop with a little context (the label edges matter)."""
     x1, y1, x2, y2 = box[:4]

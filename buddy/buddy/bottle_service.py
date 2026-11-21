@@ -27,9 +27,10 @@ import cv2
 import numpy as np
 
 from .bottle_tracker import BottleTracker
-from .bottles import GALLERY_DIR, Embedder, Gallery, crop
+from .bottles import GALLERY_DIR, Classifier, Embedder, Gallery, crop
 
 OTHER = "_other"          # the "not a medicine" class: never reported as a bottle
+CLASSIFIER_MIN = 0.65     # trained classifier: held-out photos at 0.6-0.9 -> 0 wrong bottles, 0 no-medicine named
 # The box the bottle is held in, close to the camera (~20-30 cm) so it FILLS the box. The first
 # version used a big box (64% x 84%) with the bottle held small inside it: the photos were mostly
 # the person and the room, and every empty view looked like the bottles with the least label.
@@ -86,6 +87,8 @@ class BottleService:
     def __init__(self, hub=None, mode="show"):
         self.mode = mode
         self.emb, self.gallery = Embedder(), Gallery(center=(mode == "show"))
+        # A classifier trained on the laptop replaces gallery matching in show mode when present.
+        self.clf = Classifier() if (mode == "show" and Classifier.available()) else None
         self.det = None
         if mode == "counter":
             from .detector import NanoDet
@@ -110,7 +113,13 @@ class BottleService:
         with self.lock:
             if self.mode == "show":
                 c, box = center_crop(img)
-                name, score, sc = self.gallery.identify(self.emb(c))
+                if self.clf is not None:
+                    sc = self.clf(c)
+                    name, score = max(sc.items(), key=lambda kv: kv[1]) if sc else ("unknown", 0.0)
+                    if score < CLASSIFIER_MIN:
+                        name = "unknown"
+                else:
+                    name, score, sc = self.gallery.identify(self.emb(c))
                 if name == OTHER:
                     name = "unknown"
                 out = [{"name": name, "score": round(score, 3), "box": box}]
@@ -230,4 +239,5 @@ class BottleService:
         return dict(self.last, age_s=round(time.time() - self.last["t"], 2) if self.last["t"] else None)
 
     def info(self):
-        return {"mode": self.mode, "bottles": {n: len(g) for n, g in self.gallery.items.items()}}
+        return {"mode": self.mode, "classifier": self.clf.classes if self.clf else None,
+                "bottles": {n: len(g) for n, g in self.gallery.items.items()}}
