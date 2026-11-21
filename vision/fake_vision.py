@@ -29,7 +29,12 @@ SCENARIOS = {
         (1.5, {"type": "intake_start", "confidence": 0.84, "lead_ms": 350}),
     ],
     "unknown": [  # a bottle Squint has never been shown
-        (1.0, {"type": "bottle_seen", "med": "unknown", "confidence": 0.41}),
+        (1.0, {"type": "bottle_seen", "med": "unknown", "confidence": 0.41, "candidates": []}),
+    ],
+    "lookalike": [  # warfarin vs Robert's metoprolol: camera can't tell, NFC must (D: cross-check the tag)
+        (1.0, {"type": "bottle_seen", "med": "unknown", "confidence": 0.87,
+               "candidates": ["metoprolol_robert", "warfarin"]}),
+        (1.5, {"type": "intake_start", "confidence": 0.93, "lead_ms": 300, "med": "unknown"}),
     ],
     "water": [  # drinking water: bottle_seen none, no intake_start
         (1.0, {"type": "bottle_seen", "med": "none", "confidence": 0.0}),
