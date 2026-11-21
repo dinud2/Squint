@@ -17,6 +17,8 @@ final class AppStore {
     var doses: [Dose] = []
     var lastError: String?
     var lastRefresh: Date?
+    var insights: [PersonInsight] = []             // routine tracking (GET /insights)
+    var insightsError: String?
     private var photos: [String: Data] = [:]          // person id -> face photo (phone only for now)
 
     // Squint, the buddy on the counter
@@ -67,6 +69,24 @@ final class AppStore {
         } catch {
             lastError = error.localizedDescription
         }
+        await refreshInsights()
+    }
+
+    /// Separate from the rest: an older station without /insights must not break Today.
+    func refreshInsights() async {
+        do {
+            insights = try await api.insights(days: 30).people
+            insightsError = nil
+        } catch {
+            insightsError = error.localizedDescription
+        }
+    }
+
+    func insight(for p: Person) -> PersonInsight? { insights.first { $0.person == p.id } }
+
+    /// The most important routine change, if any, for the tab badge and Today.
+    var routineAlert: PersonInsight? {
+        insights.filter { $0.level == .talk }.first ?? insights.filter { $0.level == .watch }.first
     }
 
     func addPerson(name: String, photo: Data?) async {
