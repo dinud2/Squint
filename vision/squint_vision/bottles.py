@@ -20,7 +20,9 @@ import numpy as np
 from .backend import OnnxModel
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL = os.path.join(HERE, "models", "mobilenetv3_small_embed.onnx")
+BASE_MODEL = os.path.join(HERE, "models", "mobilenetv3_small_embed.onnx")
+TRAINED_MODEL = os.path.join(HERE, "models", "bottle_embed.onnx")   # tools/train_bottle_embed.py
+MODEL = os.environ.get("SQUINT_EMBED") or (TRAINED_MODEL if os.path.exists(TRAINED_MODEL) else BASE_MODEL)
 GALLERY_DIR = os.path.join(HERE, "data", "gallery")
 THRESH_FILE = os.path.join(HERE, "models", "bottle_thresholds.json")
 EMPTY = "_empty"
