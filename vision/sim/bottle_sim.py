@@ -8,6 +8,8 @@ label) -> bottle sprite -> random tilt/scale/position on a cluttered background
 `enrol` views are easy (held up to the camera, slowly turned); `test` views are
 hard (in motion, tilted toward the mouth, occluded, badly lit).
 """
+import zlib
+
 import cv2
 import numpy as np
 
@@ -36,7 +38,7 @@ def label_texture(spec, rng, w=360, h=150):
     cv2.putText(tex, spec["dose"], (10, 98), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (20, 20, 20), 2, cv2.LINE_AA)
     cv2.putText(tex, spec["who"], (10, 128), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 1, cv2.LINE_AA)
     x = 240
-    r = np.random.default_rng(abs(hash(spec["name"])) % 2**32)   # barcode is fixed per bottle
+    r = np.random.default_rng(zlib.crc32(spec["name"].encode()))   # barcode fixed per bottle (crc32: stable across runs, unlike hash())
     while x < w - 10:
         bw = int(r.integers(1, 4))
         cv2.rectangle(tex, (x, 95), (x + bw, 140), (10, 10, 10), -1)
