@@ -47,12 +47,17 @@ class BottleService:
         self.tracker = BottleTracker()
         self.hub = hub
         self.lock = threading.Lock()          # cv2.dnn nets are not thread-safe
-        self.last_jpg = None
+        self.last_img = None
 
     def frame(self, jpg):
         img = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             return {"error": "could not decode JPEG"}
+        return self.frame_image(img)
+
+    def frame_image(self, img):
+        """One BGR frame (from the counter camera, or a JPEG the Tab5 posted)."""
+        self.last_img = img
         t0 = time.time()
         with self.lock:
             boxes = self.det(img)
@@ -65,7 +70,6 @@ class BottleService:
             seen = [(o["name"], o["score"], o["box"]) for o in out if o["name"] != "unknown"]
             events = self.tracker.update(time.time(), seen, img.shape[0])
             on_counter = self.tracker.on_counter()
-        self.last_jpg = jpg
         for ev in events:
             if self.hub is not None:
                 self.hub.publish(ev)
@@ -73,9 +77,13 @@ class BottleService:
                 "ms": round((time.time() - t0) * 1000)}
 
     def enroll(self, name, jpg, augment=6):
-        img = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
+        """jpg = a photo with the bottle in it, or empty: use the latest counter-camera frame."""
+        if jpg:
+            img = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
+        else:
+            img = self.last_img
         if img is None:
-            return {"error": "could not decode JPEG"}
+            return {"error": "no photo: send a JPEG, or run the bottle camera loop"}
         with self.lock:
             boxes = self.det(img)
             if name == OTHER:
