@@ -39,8 +39,8 @@ Lines the Pi sends:
 | `presence Dinu` | Someone recognised arrives (wakes the face) |
 | `remind Metformin\|Dinu: Metformin and Tylenol` | They have doses to take now |
 | `greet Kathy` | They arrived with nothing to take |
-| `remind Tylenol\|Did you take it?` | The right bottle was picked up: **show Yes / No** |
-| `happy Taken\|Tylenol` | Hand-to-mouth was ≥ 90% sure: **show the green check, auto-tick it after 2 s** (the Pi records it) |
+| `ask Tylenol\|Did you take it?` | The right bottle was picked up: **Yes / No buttons**, wait for a tap |
+| `taken Motrin\|Did you take it?` | Hand-to-mouth was ≥ 90% sure: same screen, **Yes ticks itself after 2 s** (the Pi records it; the Tab5 only sends a No tapped within the 2 s) |
 | `happy Well done!\|Metformin` | After a "Yes" |
 | `wrong Dinu's pills\|That's Dinu's Tylenol` | Someone picked up another person's medicine |
 | `stop Already taken\|Metformin at 10:55` | A high-risk medicine (or one with no dose left today) was already taken |
@@ -49,11 +49,13 @@ Lines the Pi sends:
 ## 2. "Did you take it?" answer
 
 ```
-POST /doses/confirm   {"med": "tylenol", "for": "dinu", "taken": true}
+POST /doses/confirm   {"taken": true}        (Yes)      {"taken": false}   (No)
 ```
 
-`med` / `for` are the ones from the last `remind ...|Did you take it?`; the Pi also returns them in
-`GET /today`. `taken: false` = "No".
+No ids needed: the Pi answers the dose that is waiting (`GET /doses/pending` shows it). `med` / `for`
+may still be given. After Yes the Pi sends `happy Well done!|<Med>`, after No `idle`. The Tab5 sends
+it from a background task (`piLink::confirm()`, `tab5-face/PiLink.h`); the screen is `Ask.h` /
+`AskPanel.h`.
 
 ## 3. Camera: send frames for bottle recognition
 

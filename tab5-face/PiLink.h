@@ -4,6 +4,9 @@
 // Lines are handed to the UI loop through a queue: call piLink::poll(handleCommand) from loop(),
 // so the face/text code only ever runs on the loop task.
 //
+// Answers to "Did you take it?" go the other way: piLink::confirm(taken) queues one, and a second
+// background task POSTs it to /doses/confirm, so the UI loop never waits on the network.
+//
 // Wi-Fi name/password and the Pi address live in secrets.h (git-ignored), see secrets.example.h.
 #pragma once
 
@@ -145,10 +148,52 @@ inline void task(void*) {
 #endif
 }
 
+// ---- "Did you take it?" answers ----------------------------------------------------
+inline QueueHandle_t& answers() {
+  static QueueHandle_t q = nullptr;
+  return q;
+}
+
+// POST /doses/confirm {"taken": true|false}. No med / person: the Pi answers the dose that is
+// waiting. Any HTTP answer is final (400 = nothing waiting any more); only a failed connection
+// is tried again.
+inline void answerTask(void*) {
+#ifndef SQUINT_NO_SECRETS
+  uint8_t taken = 0;
+  for (;;) {
+    if (xQueueReceive(answers(), &taken, portMAX_DELAY) != pdTRUE) continue;
+    const char* body = taken ? "{\"taken\": true}" : "{\"taken\": false}";
+    for (int attempt = 0; attempt < 3; ++attempt) {
+      for (int i = 0; i < 20 && WiFi.status() != WL_CONNECTED; ++i) vTaskDelay(pdMS_TO_TICKS(250));
+      HTTPClient http;
+      http.begin(String("http://") + SQUINT_PI_HOST + ":8081/doses/confirm");
+      http.addHeader("Content-Type", "application/json");
+      http.setTimeout(5000);
+      const int code = http.POST(body);
+      String reply = code > 0 ? http.getString() : String();
+      http.end();
+      Serial.printf("[pilink] confirm %s -> %d %s\n", body, code, reply.c_str());
+      if (code > 0) break;
+      vTaskDelay(pdMS_TO_TICKS(500));
+    }
+  }
+#else
+  vTaskDelete(nullptr);
+#endif
+}
+
+// Call from the UI loop: queues the answer and returns at once.
+inline void confirm(bool taken) {
+  const uint8_t v = taken ? 1 : 0;
+  if (!answers() || xQueueSend(answers(), &v, 0) != pdTRUE) Serial.println("[pilink] confirm dropped");
+}
+
 // Call once from setup().
 inline void begin() {
   queue() = xQueueCreate(16, kLineLen);
+  answers() = xQueueCreate(4, sizeof(uint8_t));
   xTaskCreatePinnedToCore(task, "pilink", 8192, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(answerTask, "pilink-tx", 6144, nullptr, 1, nullptr, 0);
 }
 
 // Call from loop(): runs every line that arrived since the last call.

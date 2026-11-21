@@ -20,6 +20,8 @@ enum class Reaction {
   Stop,         // Otto "shocked": wide eyes, red, flashing frame. Holds until cleared.
   WrongPerson,  // Otto "embarrassed": eyes dart aside, sweat drop. Amber.
   Sleep,        // Otto "sleepy": eyes close, floating "z". Dim blue.
+  Ask,          // "Did you take it?": small eyes on top, Yes / No buttons below (Ask.h).
+                // Kept last: the "next" / cycle code steps through the first 8 only.
 };
 
 struct ReactionState {
@@ -59,7 +61,7 @@ inline uint32_t defaultHoldMs(Reaction r) {
     case Reaction::Concerned:   return 12000;
     case Reaction::WrongPerson: return 10000;
     case Reaction::Stop:        return 30000;  // Long, but never stuck forever.
-    default:                    return 0;      // Reminder and Sleep hold.
+    default:                    return 0;      // Reminder, Sleep and Ask hold.
   }
 }
 
@@ -119,6 +121,7 @@ inline const char* name(Reaction r) {
     case Reaction::Stop:        return "stop";
     case Reaction::WrongPerson: return "wrong";
     case Reaction::Sleep:       return "sleep";
+    case Reaction::Ask:         return "ask";
   }
   return "idle";
 }

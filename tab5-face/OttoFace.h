@@ -15,6 +15,7 @@
 //   stop       ring eyes                                          red
 //   wrong      lowered eyes glancing away                         amber
 //   sleep      closed eyes, slow breathing                        dim blue
+//   ask        small round eyes on top, Yes / No below (AskPanel.h)  white
 
 #pragma once
 
@@ -24,6 +25,7 @@
 #include <cmath>
 #include <cstdlib>
 
+#include "AskPanel.h"
 #include "Reactions.h"
 
 namespace face {
@@ -37,6 +39,11 @@ constexpr float kEyeGap = 620.0f;      // Distance between eye centres.
 constexpr float kEyeY = kHeight / 2.0f;  // Eye centre height: centred on the screen.
 constexpr float kScale = kEyeSize / 240.0f;  // line widths and motion were tuned at 240 px eyes
 constexpr uint32_t kFrameUs = 16667;   // 60 Hz.
+// "Did you take it?" (Reaction::Ask): smaller eyes higher up, the words and buttons below.
+// The eyes must stay above askpanel::kTop (eye top/bottom = y -/+ size/2, plus the bob).
+constexpr float kAskEyeSize = 200.0f;
+constexpr float kAskEyeGap = 380.0f;
+constexpr float kAskEyeY = 145.0f;
 
 // The panel is portrait in memory (720 x 1280). Pushing in a landscape rotation made M5GFX
 // transpose every pixel (~15 ms per frame), so the display stays in its native portrait
@@ -56,6 +63,7 @@ constexpr Rgb kWhite{0xFF, 0xFF, 0xFF};
 constexpr Rgb kAmber{0xEF, 0x9F, 0x27};
 constexpr Rgb kRed{0xE2, 0x4B, 0x4A};
 constexpr Rgb kSleepBlue{0x5A, 0x86, 0xC4};
+constexpr Rgb kGreen{0x4C, 0xC2, 0x6A};  // "Yes" (same as askpanel::kGreen)
 constexpr uint16_t kBackground = 0x0000;
 
 inline Rgb colorFor(Reaction r) {
@@ -111,6 +119,7 @@ class OttoFace {
       heart(w / 2.0f, w / 2.0f, sz, color565(kWhite));
       g_ = &canvas_;
     }
+    if (!askPanel_.begin()) return false;
     lastUs_ = nextUs_ = lgfx::micros();
     nextBlinkMs_ = lgfx::millis() + 2500;
     nextGlanceMs_ = lgfx::millis() + 1500;
@@ -145,7 +154,13 @@ class OttoFace {
     fill(prevInk_[1], kBackground);
     ink_[0] = ink_[1] = Box{};
     frameW_ = 0;
+    // Yes / No panel: shown once the Ask eyes start to open, cleared as soon as Ask ends
+    // (before this frame's eyes are drawn, so the next expression is never wiped).
+    const bool wantPanel = shown_ == Reaction::Ask && lgfx::millis() - changeMs_ >= kCloseMs;
+    nPanelOut_ = 0;
+    if (askPanel_.shown() && !wantPanel) landscape([&] { askPanel_.clear(canvas_, [this](const askpanel::Rect& r) { panelOut(r); }); });
     draw(dt);
+    if (wantPanel && (!askPanel_.shown() || panelVersion_ != ask::state().version)) drawPanel();
     const uint32_t t1 = lgfx::micros();
     const Box l = unite(prevInk_[0], ink_[0]), r = unite(prevInk_[1], ink_[1]);
     if (!l.empty() && !r.empty() && l.x0 <= r.x1 && r.x0 <= l.x1 && l.y0 <= r.y1 && r.y0 <= l.y1) {
@@ -154,6 +169,14 @@ class OttoFace {
       push(l);
       push(r);
     }
+    if (nPanelOut_) {
+      const uint32_t p0 = lgfx::micros();
+      for (int i = 0; i < nPanelOut_; ++i) push(panelOut_[i]);
+#if defined(ARDUINO)
+      Serial.printf("[ask] panel sent in %.1f ms (%d areas)\n", (lgfx::micros() - p0) / 1000.0f, nPanelOut_);
+#endif
+    }
+    if (askPanel_.shown()) drawCountdown();
     // The STOP frame is steady: drawn and sent only when it appears or goes away.
     if (frameW_ != prevFrameW_) {
       if (prevFrameW_) clearStrips(prevFrameW_);
@@ -189,6 +212,53 @@ class OttoFace {
   };
   Box ink_[2], prevInk_[2];  // left / right half: the gap between the eyes is never sent
   int frameW_ = 0, prevFrameW_ = 0;
+  // "Did you take it?" panel (only the parts that change are redrawn and sent)
+  askpanel::AskPanel askPanel_;
+  uint32_t panelVersion_ = 0;
+  int barShown_ = 0;  // px of the "taken" countdown bar already on screen
+  Box panelOut_[8];   // areas the panel changed this frame, sent after the eyes
+  int nPanelOut_ = 0;
+
+  // Runs f with the canvas turned to landscape, so the panel draws in screen coordinates.
+  template <typename F>
+  void landscape(F f) {
+    canvas_.setRotation(kFlip ? 3 : 1);
+    f();
+    canvas_.setRotation(0);
+  }
+  // Collects a landscape rectangle the panel changed, as a physical box to send. (Called while
+  // the canvas is turned, so T(), which reads the canvas size, can't be used here.)
+  void panelOut(const askpanel::Rect& r) {
+    if (nPanelOut_ >= 8) return;
+    auto phys = [](int X, int Y) { return kFlip ? Pt{(float)Y, (float)(kCanvasH - 1 - X)} : Pt{(float)(kCanvasW - 1 - Y), (float)X}; };
+    const Pt a = phys(r.x0, r.y0), b = phys(r.x1, r.y1);
+    panelOut_[nPanelOut_++] = Box{std::max(0, (int)std::min(a.x, b.x)), std::max(0, (int)std::min(a.y, b.y)),
+                                  std::min(kCanvasW - 1, (int)std::max(a.x, b.x)), std::min(kCanvasH - 1, (int)std::max(a.y, b.y))};
+  }
+  void drawPanel() {
+    const uint32_t t0 = lgfx::micros();
+    const ask::State& s = ask::state();
+    landscape([&] { askPanel_.draw(canvas_, s, [this](const askpanel::Rect& r) { panelOut(r); }); });
+    panelVersion_ = s.version;
+    barShown_ = 0;
+#if defined(ARDUINO)
+    Serial.printf("[ask] panel drawn in %.1f ms\n", (lgfx::micros() - t0) / 1000.0f);
+#else
+    (void)t0;
+#endif
+  }
+  // "taken": a green bar fills under Yes over 2 s. It only grows, so each frame draws and
+  // sends just the new slice (the panel redraw at the tick clears it).
+  void drawCountdown() {
+    if (ask::state().phase != ask::Phase::Counting) return;
+    const int want = (int)(askpanel::kBtnW * ask::countdown());
+    if (want <= barShown_) return;
+    const float x0 = askpanel::kYesX + barShown_, x1 = askpanel::kYesX + want;
+    fillRectL(x0, askpanel::kBarY, x1 - x0 - 1, askpanel::kBarH - 1, color565(kGreen));
+    const Pt a = T(x0, askpanel::kBarY), b = T(x1, askpanel::kBarY + askpanel::kBarH);
+    push(Box{(int)std::min(a.x, b.x), (int)std::min(a.y, b.y), (int)std::max(a.x, b.x), (int)std::max(a.y, b.y)});
+    barShown_ = want;
+  }
 
   static Box unite(const Box& a, const Box& b) {
     if (a.empty()) return b;
@@ -446,6 +516,12 @@ class OttoFace {
     const float lx = kWidth / 2 - kEyeGap / 2, rx = kWidth / 2 + kEyeGap / 2;
     const float D = kEyeSize;
 
+    if (closing && r == Reaction::Ask) {  // the small Ask eyes close where they are
+      const float h = std::max(8.0f, kAskEyeSize * open);
+      blob(kWidth / 2 - kAskEyeGap / 2, kAskEyeY, kAskEyeSize * 0.92f, h, c);
+      blob(kWidth / 2 + kAskEyeGap / 2, kAskEyeY, kAskEyeSize * 0.92f, h, c);
+      return;
+    }
     if (closing) {  // any expression closes into two thin lids
       const float h = std::max(10.0f, D * open);
       blob(lx, kEyeY, D * 0.92f, h, c);
@@ -557,6 +633,19 @@ class OttoFace {
           const float ex = x + ax, ey = kEyeY + D * 0.1f + bob(t, 14, 0.35f, kPi / 2);
           if (grow >= 1) stamp(key(9), (int)D + 16, ex, ey, [&](float px, float py) { lowered(px, py, 1); });
           else lowered(ex, ey, grow);
+        }
+        break;
+      }
+      case Reaction::Ask: {  // small round eyes looking down at the buttons, blinking
+        updateIdleMotion(dt, now, false);
+        const float d = kAskEyeSize;
+        const float o = blinkOpen(now) * (0.08f + 0.92f * grow);
+        const float y = kAskEyeY + 14 + bob(t, 6, 0.3f);  // a little low: looking at the buttons
+        for (float x : {kWidth / 2 - kAskEyeGap / 2, kWidth / 2 + kAskEyeGap / 2}) {
+          if (o > 0.995f)
+            stamp(key(11), (int)d + 16, x, y, [&](float px, float py) { blob(px, py, d, d, c); });
+          else
+            blob(x, y, d, d * o, c);
         }
         break;
       }

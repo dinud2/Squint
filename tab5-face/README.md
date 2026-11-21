@@ -35,6 +35,8 @@ These images come from the desktop preview. They are not from the Tab5.
 | `concerned` | Amber verdict (unknown bottle, fault) | confused (question mark) | amber | "Show me the label" | 12 s |
 | `stop` | Red verdict / STOP | shocked + flashing red frame | red | "STOP" / "Already taken" | 30 s or until the next event |
 | `wrong` | Another person's bottle | embarrassed (eyes look away) | amber | "Not your pills" | 10 s |
+| `ask Tylenol\|Did you take it?` | The right bottle was picked up | small eyes + Yes / No buttons | white | the med name, the question | Until the Pi's next line (`happy` after Yes, `idle` after No) |
+| `taken Motrin\|Did you take it?` | Hand-to-mouth ≥ 90% sure | same, Yes pre-selected, ticks itself after 2 s | white | the med name, the question | 2 s + green check, then "Well done!" (only a No tap is sent) |
 
 Timed reactions go back to `idle`. `idle` goes back to `sleep`.
 

@@ -23,6 +23,8 @@
 //     wrong Robert's pills
 //     sleep
 //     idle
+//   ask Tylenol|Did you take it?     Yes / No buttons, waits for a tap (Ask.h)
+//   taken Motrin|Did you take it?    same, Yes ticks itself after 2 s unless No is tapped
 //   say greet_morning      play a clip only
 //   next                   go to the next reaction (testing)
 //   demo                   play Margaret's scripted morning
@@ -36,6 +38,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "Ask.h"
 #include "OttoFace.h"
 #include "Reactions.h"
 #include "Voice.h"
@@ -219,8 +222,9 @@ void handleCommand(char* line) {
     reactions::away();
     return;
   }
-  Reaction r;
-  if (!reactionFromName(line, &r)) return;
+  const bool isAsk = strcmp(line, "ask") == 0, isTaken = strcmp(line, "taken") == 0;
+  Reaction r = Reaction::Ask;
+  if (!isAsk && !isTaken && !reactionFromName(line, &r)) return;  // unknown: ignored
 
   // Split "title|detail|clip". Missing parts use the defaults.
   const char* parts[3] = {nullptr, nullptr, nullptr};
@@ -230,6 +234,12 @@ void handleCommand(char* line) {
       args = strchr(args, '|');
       if (args) *args++ = '\0';
     }
+  }
+  // "ask Tylenol|Did you take it?" / "taken Motrin|Did you take it?": the Yes / No screen.
+  if (isAsk || isTaken) {
+    ask::start(isTaken, parts[0], parts[1]);
+    if (parts[2] && *parts[2]) say(parts[2]);
+    return;
   }
   // "greet Margaret" -> "Hi Margaret!".
   static char greeting[64];
@@ -262,9 +272,21 @@ static void readSerial() {
 bool tapWakes = true;  // A tap counts as a person nearby. Set false to ignore taps.
 
 static void readTouch() {
-  if (!tapWakes || !M5.Touch.isEnabled()) return;
+  if (!M5.Touch.isEnabled()) return;
   auto t = M5.Touch.getDetail();
   if (!t.wasPressed()) return;
+  if (ask::active()) {  // "Did you take it?": the buttons work even when tapWakes is off
+    // Touch is in the display's portrait rotation; the buttons are laid out in landscape.
+    const int w = M5.Display.width(), h = M5.Display.height();
+    const int x = face::kFlip ? h - 1 - t.y : t.y, y = face::kFlip ? t.x : w - 1 - t.x;
+    const int b = askpanel::hit(x, y);
+#if defined(ARDUINO)
+    Serial.printf("[ask] tap %d,%d -> %s\n", x, y, b == 1 ? "yes" : (b == 0 ? "no" : "-"));
+#endif
+    if (b >= 0) ask::tap(b == 1);
+    return;
+  }
+  if (!tapWakes) return;
   demoIndex = -1;
   onPresence();
 }
@@ -294,6 +316,9 @@ void setup() {
   react(Reaction::Sleep);  // Asleep until a person approaches or a dose is due.
 #if defined(ARDUINO)
   piLink::begin();
+  ask::sender() = piLink::confirm;
+#else
+  ask::sender() = [](bool taken) { printf("[ask] would POST /doses/confirm {\"taken\": %s}\n", taken ? "true" : "false"); };
 #endif
 }
 
@@ -308,6 +333,7 @@ void loop() {
 #if defined(FACE_CYCLE)
   updateCycle();
 #endif
+  ask::tick();
   reactions::tick();
   updateBrightness();
   ottoFace.update();
