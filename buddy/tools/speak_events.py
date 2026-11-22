@@ -10,6 +10,7 @@ Also prints the Tab5 commands / bottle events as they happen, so the whole flow 
 import argparse
 import json
 import time
+import urllib.error
 import urllib.request
 
 
@@ -32,10 +33,18 @@ def main():
                         print(f"[say] {ev['text']}", flush=True)
                         req = urllib.request.Request(a.voice, data=json.dumps({"text": ev["text"]}).encode(),
                                                      headers={"Content-Type": "application/json"})
-                        try:
-                            urllib.request.urlopen(req, timeout=60).read()
-                        except Exception as e:
-                            print(f"[speak] voice service failed: {e}", flush=True)
+                        for attempt in range(10):     # voice service still starting: retry, don't drop it
+                            try:
+                                urllib.request.urlopen(req, timeout=60).read()
+                                break
+                            except urllib.error.URLError as e:
+                                if attempt == 9 or "refused" not in str(e).lower():
+                                    print(f"[speak] voice service failed: {e}", flush=True)
+                                    break
+                                time.sleep(1)
+                            except Exception as e:
+                                print(f"[speak] voice service failed: {e}", flush=True)
+                                break
                     elif t in ("people_present", "bottle_shown", "bottle_picked", "dose_taken"):
                         info = {k: v for k, v in ev.items() if k not in ("type", "time", "since", "seq")}
                         print(f"[{t}] {info}", flush=True)
