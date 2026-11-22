@@ -26,6 +26,7 @@ class Presence:
         self.unknown = 0
         self.unknown_here = False
         self.unknown_hits, self.unknown_last = 0, -1e9
+        self.alone_hits = 0      # frames in a row with a stranger and nobody known
 
     def update(self, t, names, unknown=0):
         """names: people recognised in this frame. -> the new steady group if it changed, else None."""
@@ -41,10 +42,12 @@ class Presence:
             self.unknown_hits, self.unknown_last = self.unknown_hits + 1, t
         else:
             self.unknown_hits = 0
+        self.alone_hits = self.alone_hits + 1 if (unknown and not names) else 0
         uh = self.unknown_hits >= self.UNKNOWN_FRAMES or (self.unknown_here and t - self.unknown_last <= self.LEAVE_S)
-        # A stranger in view replaces someone not seen for a second (not the full LEAVE_S): the
-        # person holding the bottle now must not be taken for whoever stood there before.
-        keep = self.SWAP_S if uh else self.LEAVE_S
+        # A stranger ALONE in view replaces someone not seen for a second (not the full LEAVE_S):
+        # the person holding the bottle now must not be taken for whoever stood there before.
+        # With a known face in the same frames (two people at the counter) nobody is dropped.
+        keep = self.SWAP_S if self.alone_hits >= self.UNKNOWN_FRAMES else self.LEAVE_S
         group = {n for n in self.present if t - self.last_seen.get(n, -1e9) <= keep}
         group |= {n for n in names
                   if t - self.first_seen[n] >= self.JOIN_S and self.hits[n] >= self.JOIN_FRAMES}
