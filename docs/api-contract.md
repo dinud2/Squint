@@ -75,15 +75,27 @@ DayPoint      { "date": "2026-11-20", "scheduled": 3, "taken": 3, "late_min": 52
 |---|---|---|---|
 | GET | `/tab5/commands?after=<seq>&wait=20` | | `{"seq": n, "lines": [...]}`: Tab5 face commands (`<reaction> title\|detail\|clip`), long-polled. Used by the Tab5 and the app's live mirror. See [tab5-pi.md](tab5-pi.md) |
 | POST | `/tab5/send` | `{"line": "happy Well done!\|Tylenol"}` | pushes a face command by hand (testing) |
-| POST | `/doses/confirm` | `{"med", "for", "taken": true}` | the person answered "Did you take it?" on the Tab5 |
-| POST | `/intake` | `{"person", "confidence"}` | fake a hand-to-mouth reading (testing, until it is built) |
+| POST | `/doses/confirm` | `{"med", "for", "taken": true}` | the person answered "Did you take it?" on the Tab5. Returns `{"med", "for", "status"}`, or `{"error"}` (400) if no dose is waiting |
+| GET | `/doses/pending` | | what "Did you take it?" is about: `{"pending": {"med", "for", "name"} or null, "present": [...], "at_counter": [...], "unknown": bool}` |
+| POST | `/intake` | `{"person", "confidence"}` | inject a hand-to-mouth reading by hand (testing). The real one comes from `buddy/intake.py`; ≥ 0.75 auto-confirms after 2 s |
 | GET | `/state` | | who is at the counter now: `{"people": [...], "unknown": n, "since", "seq"}` |
 | GET | `/events` | | Server-Sent Events, one `data: {json}` per event (`people_present`, `intake`, ...) |
 | GET | `/health` | | `{"ok", "camera_age_s", "warnings": [...], "faces", "bottles", "voice", "clients", "uptime_s"}`: what each part last did, see `buddy/buddy/diag.py` |
 | GET | `/cams` | | web page with the camera stream |
+| GET | `/preview.jpg`, `/preview.mjpg` | | a small, cheap copy of the camera picture (one frame, or a stream) for a laptop view |
+| GET | `/bottles/last` | | the bottle loop's last decision: candidates, classifier probabilities, verdict and why |
 | GET | `/bottles` | | enrolled bottles |
 | POST | `/bottles/enroll?name=`, `/bottles/reset?name=` | JPEG | enrol or clear a bottle (used by `tools/enroll_bottle.py`) |
 | POST | `/tab5/frame` | JPEG | recognise the bottle in one frame |
+
+## How the app uses it
+
+- **Today / widget / Siri:** `GET /people`, `/medications`, `/today` on launch, on every new Tab5
+  line, and every 30 s while open; a background app refresh while closed.
+- **Live mirror of the Tab5 face:** `GET /tab5/commands` long-poll, the same stream the Tab5 reads.
+- **Notifications:** the app compares each `/today` with the last one and notifies on taken, missed
+  and flagged (`ios/Squint/Notifier.swift`). There is no push server: no APNs, nothing to configure.
+- **Trends:** `GET /insights?days=30`, `GET /history?days=30`.
 
 ## Other services the app talks to
 
