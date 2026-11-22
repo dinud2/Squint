@@ -23,7 +23,9 @@ import urllib.request
 AUTO_CONFIRM = 0.90
 UNSURE_AFTER_S = 60       # a bottle picked up but never confirmed within this long counts as "unsure"
 AUTO_DELAY_S = 2.0
-SEEN_GRACE_S = 10   # someone left view less than this ago still counts as present for a bottle
+# One camera: people are recognised walking up, then show the bottle at chest height with their
+# face out of view. The last group recognised stays "at the counter" this long for bottles.
+AT_COUNTER_S = 120
 GREET_COOLDOWN_S = 120    # people step in and out at a counter: say hello at most once per 2 min
 
 
@@ -63,7 +65,7 @@ class Coordinator:
         self.announce_url = announce_url        # e.g. http://<laptop>:8765/announce (home/server.py)
         self.tab5 = Tab5Queue()
         self.present = []
-        self.last_seen = {}                     # pid -> time last in view (the bottle can hide the face)
+        self.last_group, self.last_group_t = [], 0.0   # who was last recognised walking up, and when
         self.pending = None                     # {"med", "for", "t"} waiting for "did you take it?"
         self.last_greet = {}                    # person -> time of the last spoken greeting
         self.arrived_at = {}                    # person -> when this visit started
@@ -130,8 +132,10 @@ class Coordinator:
         with self.lock:
             arrived = [p for p in people if p not in self.present]
             left = [p for p in self.present if p not in people]
-            for p in list(self.present) + list(people):
-                self.last_seen[p] = now
+            if self.present:                   # whoever was in view until now
+                self.last_group_t = now
+            if people:                         # a new face replaces whoever was here before
+                self.last_group, self.last_group_t = list(people), now
             self.present = list(people)
         for pid in arrived:
             self.arrived_at[pid] = now
@@ -182,7 +186,7 @@ class Coordinator:
             return
         owner, oname, mname = m["for"], self.store.name(m["for"]), m["name"]
         now = time.time()
-        present = list(self.present) or [p for p, t in self.last_seen.items() if now - t < SEEN_GRACE_S]
+        present = list(self.present) or (list(self.last_group) if now - self.last_group_t < AT_COUNTER_S else [])
         if not present:
             # Nobody recognised: don't guess whose dose it is (it used to go to the bottle's owner).
             self.log("bottle_no_face", [], med=bottle)
