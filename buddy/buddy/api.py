@@ -50,7 +50,7 @@ class Hub:
         self.diag = Diag()           # what each part last did (GET /health)
         self.preview, self.preview_t = None, 0.0   # small JPEG for the laptop view (GET /preview.mjpg)
 
-    PREVIEW_W, PREVIEW_H, PREVIEW_Q, PREVIEW_FPS = 480, 272, 60, 5
+    PREVIEW_W, PREVIEW_H, PREVIEW_Q, PREVIEW_FPS = 480, 272, 60, 10
 
     def set_preview(self, t, frame):
         """Keep a small, low-quality copy of a frame the loops already decoded: the laptop's
