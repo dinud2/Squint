@@ -1,184 +1,162 @@
 # Squint
 
-A counter-top medicine buddy for older couples who keep their medicines together.
+Squint is a small face that sits on the kitchen counter next to the pill bottles. It knows who
+walked up, which bottle they picked up, and whether their hand went to their mouth. It greets
+them, reminds them what to take, says **STOP** before a second dose of a dangerous drug, and
+tells their family when something needs attention.
 
-Squint is a small 3D-printed figure with a face (an M5Stack Tab5). It sits by the pill bottles.
+We built it at Hack Western 13 for older couples who keep their medicine together, and for the
+son or daughter who worries about them from an hour away.
 
-When someone walks up, it:
-- recognises who it is
-- greets them on a Google Home
-- reminds them what to take
-- checks with a camera that **the right person picks up the right bottle**
-- watches for the hand going to the mouth, and logs the dose itself
+## Why
 
-It stops a second dose of a high-risk drug, and warns when someone picks up their partner's
-medicine. Their children set it up once in the iOS app, then see each day at a glance and get told
-a notification the moment something needs them. They can also just ask Siri (*"Has Dinu taken his pills in Squint?"*)
-or look at a widget on their home or lock screen. Over weeks, Squint also notices when someone's
-routine starts to change (doses later and later, more double-dose attempts, more mix-ups) and says
-so gently. It never claims to diagnose anything.
+About one Canadian senior in every two hundred is hospitalized each year because of a reaction
+to their own medicine, and blood thinners are the most common cause (CIHI). The mistakes behind
+those numbers are usually simple. Someone takes their blood thinner at eight, forgets, and takes
+it again at nine. Or they pick up their partner's bottle, which has the same red label and sits on
+the same counter.
 
-**Read next:** [How it works](docs/architecture.md) · [The AI](docs/models.md) ·
-[The API](docs/api-contract.md) · [Routine tracking](docs/decline-tracking.md)
+Pill organisers and smart dispensers ask people to change a routine they've had for forty years.
+Squint doesn't. It watches the bottles they already use.
 
-## Where it stands (22 Nov 2026)
+## What it does
 
-The whole loop runs on the real hardware on one phone hotspot:
-- The camera on the Pi recognises a person.
-- The Pi tells the Tab5 what face to show, and sends a greeting to the laptop, which speaks it on
-  the Google Home.
-- Holding up a bottle names it (colour + a label classifier), checks it's yours, and a hand to the
-  mouth confirms the dose by itself.
-- The iOS app, its widget, Siri and its notifications read the same Pi.
+At the counter:
 
-What is not done yet is listed under [What's next](#whats-next). The physical setup (where the
-camera and screen sit) has changed; its docs are being redone, so `rig/` was removed for now.
+- **Recognises who walked up** and greets them by name on a Google Home, then tells them what
+  they take today.
+- **Names the bottle they're holding** and checks that it's theirs, that it's due, and that they
+  haven't already taken it today.
+- **Watches for the hand going to the mouth** and logs the dose by itself. If it isn't sure, it
+  asks "Did you take it?" on the screen.
+- **Stops a double dose** of a high-risk medicine with red eyes and a spoken warning: "Stop, Dinu.
+  You already took your Tylenol at 8:02."
+- **Warns about mix-ups** when someone picks up their partner's medicine.
+- **Stays quiet with strangers.** Anyone it doesn't know is "unknown", and it won't guess.
 
-## How the pieces fit
+For the family, on iPhone:
+
+- Today's doses on a timeline, and a live copy of Squint's face.
+- A notification when a dose is taken (quiet) or missed or stopped (with sound).
+- Siri ("Has Dinu taken his pills in Squint?") and a home and lock screen widget.
+- **Trends:** each person compared with their own usual over the last week: doses drifting later,
+  more double-dose attempts, more mix-ups. It suggests a chat with their doctor when something
+  changes. It doesn't diagnose anything.
+
+## How it works
 
 ```
-          counter (the elder side)                                 caregiver side
- ┌─────────────────────────────────────────────┐
- │ C270 (faces + bottles) ───┐  pi/camstream   │
- │                           ▼  :8080          │
- │                Raspberry Pi 5 (QNX)         │
- │                buddy/  service :8081 ───────┼──────▶ ios/  Squint app, widget, Siri
- │                 faces · bottles · schedule  │   people, medicines, today's doses,
- │                 coordinator · dose log      │   live mirror of Squint's face,
- │                 journal · insights          │   routine trends (/insights)
- │                    │               │        │
- │   GET /tab5/commands       POST /announce   │
- │                    ▼               ▼        │
- │   tab5-face/ (Tab5 face)   home/ (laptop :8765) ──▶ Google Home (Cast, or Bluetooth
- └─────────────────────────────────────────────┘                     to the laptop)
+ THE COUNTER                                                     THE FAMILY
+ ┌──────────────────────────────────────────────────────────┐
+ │  USB webcam ──▶ Raspberry Pi 5 running QNX 8             │
+ │                 ├─ camstream (C)        camera, :8080    │
+ │                 └─ Squint service (Python)  API, :8081 ──┼──▶ iPhone app, widget, Siri,
+ │                      faces · bottles · hand to mouth     │    notifications
+ │                      decisions · dose log · trends       │
+ │                     │                    │               │
+ │                     ▼                    ▼               │
+ │        Tab5 screen (the face)    laptop voice ──▶ Google Home
+ └──────────────────────────────────────────────────────────┘
 ```
 
-Everything talks plain HTTP + JSON on one local network. The endpoints are in
-[docs/api-contract.md](docs/api-contract.md).
+One camera answers three questions, and every model runs on the Pi. Nothing goes to the cloud.
 
-## What's in this repo
-
-| Folder | What it is | Owner | State |
-|---|---|---|---|
-| [`buddy/`](buddy/README.md) | **The backend**, which runs on the Pi: face and bottle recognition, the coordinator, the schedule and dose log, routine tracking, and the HTTP API on `:8081` | Dinu | working, tested live on the Pi |
-| [`tab5-face/`](tab5-face/README.md) | Tab5 firmware (Arduino): Squint's eyes and big words, which fetches its commands from the Pi | Kathy | working on the Tab5 |
-| [`pi/`](pi/README.md) | Camera stream for QNX (`camstream.c`) and `squint_start.sh` to start everything after a reboot | Dinu | working |
-| [`ios/`](ios/README.md) | Caregiver app (SwiftUI): setup, today's doses, live Squint, routine trends, notifications, label scanning, Siri and Shortcuts, home and lock screen widget | Ved | working, demo and live |
-| [`home/`](home/README.md) | The voice: offline Piper text-to-speech, cast to a Google Nest, or played on the laptop (e.g. to a Google Home paired over Bluetooth) | Ved | working |
-| [`docs/`](docs/) | [architecture](docs/architecture.md), [models](docs/models.md), [API contract](docs/api-contract.md), [Tab5 ↔ Pi link](docs/tab5-pi.md), [routine tracking](docs/decline-tracking.md), [camera and models: why it stays quiet](docs/camera-models.md) | all | |
-
-**The models** ([details](docs/models.md)). All run on the Pi with OpenCV's `cv2.dnn`, so the
-same code runs on QNX and a laptop, and nothing leaves the house:
-
-| Question | Model |
+| Question | How |
 |---|---|
-| Who is at the counter? | **YuNet** finds faces, **SFace** tells enrolled people apart (each against their own ~40 photos) |
-| Which medicine is that? | **label colour** finds candidates, a **MobileNetV3-Small** we trained on label crops confirms, splits or vetoes |
-| Did they take it? | **MediaPipe palm detector** around the mouth (YuNet's mouth landmarks) |
+| Who is here? | YuNet finds faces; SFace compares each face with that person's ~40 enrolment photos |
+| Which bottle? | The label colour finds candidates; a MobileNetV3 we trained on label crops confirms or rejects them |
+| Did they take it? | A MediaPipe palm detector watches the area around the mouth |
 
-Anything that doesn't match well enough is "unknown" or "not sure", never a guess: on held-out
-recording sessions the bottle pipeline named **0 wrong bottles**.
+The rule behind all three is that Squint would rather say "not sure" than be wrong. A face has to
+clearly beat everyone else to be named, and colour and classifier have to agree on a bottle. On
+recording sessions we held out of training, it named **zero wrong bottles**.
 
-**Routine tracking is statistics, not a trained model.** Each person is compared with their own
-usual, per signal, in `buddy/buddy/insights.py`. See [docs/decline-tracking.md](docs/decline-tracking.md).
+Routine tracking is plain statistics, not a model: each person against their own last four weeks.
 
-## First time on a new laptop
+More detail: [how it works](docs/architecture.md) · [the models](docs/models.md) ·
+[the API](docs/api-contract.md) · [routine tracking](docs/decline-tracking.md)
+
+## Built on QNX
+
+The whole station runs on a Raspberry Pi 5 under QNX 8, the real-time OS used in cars and medical
+devices.
+
+- **The camera** is our own C program, `pi/camstream.c`, written against QNX's native camera API.
+  The camera headers weren't on the device, so we declared the functions ourselves and worked out
+  the frame layout from a live frame with `pi/probe.c`.
+- **It runs at real-time priority** (`on -p 20`), so the camera keeps up however hard the
+  recognition is working. Slow models skip frames; capture never stalls.
+- **The camera driver is its own process**, QNX's sensor service. We pinned it to our webcam's USB
+  ID, and `pi/squint_start.sh` restarts it and waits for the device if it ever drops.
+- **No PyTorch on the device.** Every model is ONNX, run through OpenCV, and the HTTP server is
+  Python's standard library, so it all works on QNX.
+
+## The repo
+
+| Folder | What's in it |
+|---|---|
+| [`buddy/`](buddy/README.md) | The Squint service on the Pi: recognition, decisions, the dose log, routine tracking, the API, plus tools for enrolment, training and diagnostics |
+| [`pi/`](pi/README.md) | The QNX camera stream and the start script |
+| [`tab5-face/`](tab5-face/README.md) | Firmware for the M5Stack Tab5: Squint's eyes, its words, and the Yes/No buttons |
+| [`ios/`](ios/README.md) | The family's iPhone app, widget and Siri shortcuts (SwiftUI) |
+| [`home/`](home/README.md) | Squint's voice: offline text-to-speech played on a Google Home |
+| [`docs/`](docs/) | Architecture, models, API, routine tracking, troubleshooting, and the [live demo script](docs/live-demo.md) |
+
+## Running it
+
+You need the Pi with QNX and the webcam, the Tab5, a laptop, and an iPhone, all on one network.
+A phone hotspot works.
 
 ```bash
 git clone https://github.com/dinud2/hackwestern.git && cd hackwestern
-```
 
-| Part | Setup |
-|---|---|
-| Backend (to run or enrol on a laptop) | `cd buddy && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`. This pins **OpenCV 4**: OpenCV 5 crashes in face alignment. |
-| Faces and bottles | Not in git (personal data). Enrol them with `buddy/tools/enroll_face.py` and `enroll_bottle.py`, or copy `buddy/data/` from the Pi. |
-| Voice | `cd home`, make a venv, `pip install -r requirements.txt`, then `./get_voices.sh` (the voices are not in git). |
-| Tab5 | Copy `tab5-face/secrets.example.h` to `secrets.h`, fill in the Wi-Fi and the Pi's address, and flash it. |
-| iOS | Open `ios/Squint.xcodeproj`. For your own iPhone, set your team on both targets (Squint and SquintWidget) and **don't commit it**. |
-| SSH to the Pi | `ssh-copy-id qnxuser@<pi>` once. If your key has a passphrase, `ssh-add --apple-use-keychain ~/.ssh/id_ed25519` so you're not asked every time. |
+# laptop: the voice
+cd home && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && ./get_voices.sh
+.venv/bin/python server.py --local
 
-## Run the demo
-
-Put everything on **one network**. A phone hotspot works: the phone, the Pi, the Tab5 and the
-laptop all join it.
-
-**0. Find the addresses.** The hotspot can hand out different ones each time (the Pi has been
-`.9` and `.3`).
-
-```bash
-ipconfig getifaddr en0                                                  # the laptop
-for i in $(seq 2 14); do nc -z -G1 172.20.10.$i 22 && echo "Pi? 172.20.10.$i"; done   # SSH open = the Pi
-```
-
-**1. Voice (laptop).** Leave it running.
-
-```bash
-cd home && .venv/bin/python server.py --local    # --local: laptop audio, e.g. a Google Home over Bluetooth
-```
-
-Without `--local`, it casts to a Nest on the same Wi-Fi.
-
-**2. Pi.** If `buddy/` changed, copy it over first, then start the camera and the service with the
-laptop's address for the voice:
-
-```bash
+# laptop: copy the service to the Pi, then start the camera and the service there
 scp -r buddy/buddy qnxuser@<pi>:/data/home/qnxuser/buddy/
-ssh qnxuser@<pi> 'SQUINT_ARGS="--announce http://<laptop>:8765/announce" ./squint_start.sh'
+ssh qnxuser@<pi> 'SQUINT_DEMO= SQUINT_ARGS="--announce http://<laptop>:8765/announce" ./squint_start.sh'
 ```
 
-Check it:
-- `http://<pi>:8080`: the live camera.
-- `http://<pi>:8081/cams`: the same, with the box to hold a bottle in.
-- `http://<pi>:8081/state`: who it sees right now.
-- `http://<pi>:8081/today`: today's doses.
+Then:
 
-**3. Tab5.** `secrets.h` must have the Pi's address from step 0. If the address changed, reflash.
-It then polls the Pi on its own.
+- **Tab5:** copy `tab5-face/secrets.example.h` to `secrets.h`, add the Wi-Fi and the Pi's address,
+  and flash it.
+- **iPhone:** open `ios/Squint.xcodeproj` and run it. In Settings, turn off *Use demo data* and
+  set the station to `http://<pi>:8081`.
+- **Check everything:** `python3 buddy/tools/doctor.py` finds the Pi and lists anything wrong.
+- **Watch what Squint sees:** `cd buddy && .venv/bin/python tools/squint_view.py --pi <pi>` shows
+  the camera with the face scores, bottle verdicts and hand-to-mouth readings beside it.
 
-**4. App.** Settings, turn off *Use demo data*, then set:
-- Station: `http://<pi>:8081`
-- Speaker: `http://<laptop>:8765`
+Faces and bottle photos are personal, so they aren't in git. Enrol people with
+`buddy/tools/enroll_face.py`. The app runs without any hardware in demo mode, with made-up data.
 
-*Test voice* should speak on the Google Home. The widget and Siri follow the app's settings.
-
-**5. Check it.** `python3 buddy/tools/doctor.py` lists anything that's wrong and how to fix it.
-
-**6. Walk up to the camera.** Squint's face changes on the Tab5 and in the app, and the Google Home
-greets you by name.
-
-**Demo mode vs. real mode.** `squint_start.sh` starts the service with `--demo` (no clock: "Yes
-Dinu, that's your Tylenol" at any time of day, nothing logged). For dose times, STOP, the dose log
-and the app's notifications, start it with `SQUINT_DEMO= ./squint_start.sh`.
-
-For the Trends tab to have something to show on a fresh station, stop the service and seed a few
-weeks of made-up history first: `cd buddy && python3 tools/seed_history.py` (`--clear` removes it).
+Leaving out `SQUINT_DEMO=` starts the station in demo mode, which checks whose bottle it is at any
+time of day but logs nothing. That's handy on a stage; it means no doses, STOPs or notifications.
 
 ## What's next
 
-- **Physical setup docs:** where the camera and the Tab5 sit, now that the setup has changed.
-- **Fixed addresses:** give the Pi a fixed address (or let the Tab5 and app find it), so a new
-  hotspot session doesn't mean reflashing the Tab5.
-- **Model tweaks for routine tracking** (the order and why are in
-  [docs/decline-tracking.md](docs/decline-tracking.md#do-the-models-need-to-change)):
-  1. Give the bottle to the nearest face in the same frame, so two people at the counter don't
-     get mixed up. This is geometry only, no retraining.
-  2. Log a bottle put back with nothing confirmed as an unsure moment.
-- **Stress testing:** more training for the face and bottle models (and the `_other` class), check
-  bottle detection on real C270 frames, and long runs on the Tab5.
-- **Real push:** notifications reach a closed app only at iOS's background refresh. Instant
-  delivery needs APNs and a relay the Pi can reach.
-- **Backend:** and upload enrolment photos from the
-  app so a laptop isn't needed.
-- **Live mode away from home:** a tunnel (e.g. `cloudflared`) from the Pi, so the app works off
-  the home network.
-- **HealthKit:** only useful from an app on the elder's own phone. Medication logs and walking
-  steadiness are read-only for other apps.
+- **Two people at the counter.** Give the bottle to the nearest hand, not just to whoever is
+  there. It's geometry on what we already detect.
+- **Any medicine.** Match the bottle to the pharmacy label the app already reads, instead of
+  training on photos of each one.
+- **Instant notifications** to a closed app, through Apple push and a small relay.
+- **Use it away from home,** with a secure tunnel from the Pi.
+- **Set up from the phone:** enrol faces from the app, and let the Tab5 find the Pi on its own.
+- **More QNX:** move recognition into separate processes with their own priorities, talking over
+  QNX message passing.
 
-## History
+## Limits
 
-Earlier ideas are kept as tags, not branches:
-- `archive/old-idea` has Squint v1, which anticipated the pill reaching the mouth from body pose.
+- It sees the hand reach the mouth, not the pill being swallowed. That's why it asks when it isn't
+  sure.
+- Bottles are recognised by their labels, so each new medicine needs photos for now.
+- With the app closed, notifications arrive at iOS's next background check, not instantly.
 
-```bash
-git checkout archive/old-idea
-```
+## Team
+
+Ved, Kathy, Dinu and Kamal, at Hack Western 13, November 2026.
+
+An earlier version that tried to predict the pill reaching the mouth from body pose is kept on the
+`archive/old-idea` tag.
