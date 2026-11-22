@@ -28,16 +28,13 @@ struct OnboardingView: View {
                 Text("I'll look after your parents' pills.")
                     .font(Theme.display(32)).foregroundStyle(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Set me up once: who takes what, and when. After that I greet them at the counter, check every bottle, and only bother you when something's wrong.")
-                    .font(.body).foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
             Button { step = 1 } label: { Label("Let's set up", systemImage: "arrow.right") }
                 .buttonStyle(InkButtonStyle())
         }
         .padding(24)
-        .background(Theme.paper.ignoresSafeArea())
+        .background(PageBackground())
     }
 }
 
@@ -56,8 +53,6 @@ struct PeopleStep: View {
                 }
             } header: {
                 Text("Who are you caring for?")
-            } footer: {
-                Text("A clear face photo lets the avatar greet each of them by name, and tell their pills apart.")
             }
 
             Section("Add someone") {
@@ -111,8 +106,8 @@ struct ConnectStep: View {
             } header: {
                 Text("Squint station")
             } footer: {
-                Text(store.useDemoData ? "Try everything with Margaret and Robert's example data. Switch it off once the station is running."
-                                       : "Shown on the station's screen, e.g. http://172.20.10.9:8081")
+                // Only when they need it: where to find the address.
+                if !store.useDemoData { Text("Shown on the station's screen, e.g. http://172.20.10.9:8081") }
             }
 
             Section {
@@ -130,8 +125,6 @@ struct ConnectStep: View {
                 if let r = testResult { Text(r).font(.footnote).foregroundStyle(.secondary) }
             } header: {
                 Text("Google Home")
-            } footer: {
-                Text("Squint uses your Google Home to call them over when it's time.")
             }
         }
         .paperBackground()

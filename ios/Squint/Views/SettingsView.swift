@@ -13,44 +13,48 @@ struct SettingsView: View {
                 Section {
                     HStack(spacing: 14) {
                         SquintBadge(mood: store.useDemoData ? .idle : (store.liveConnected ? store.squint.mood : .sleep), size: 40)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Squint").font(Theme.display(20, .bold))
-                            Text(store.useDemoData ? "Showing demo data" : store.liveConnected ? "Connected to the station" : "Looking for the station…")
-                                .font(.subheadline).foregroundStyle(Theme.muted)
-                        }
+                        TitleBlock(title: "Squint",
+                                   subtitle: store.useDemoData ? "Showing demo data" : store.liveConnected ? "Connected to the station" : "Looking for the station…")
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 6)
                 }
 
                 Section("People") {
                     ForEach(store.elders) { p in
-                        HStack(spacing: 12) { Avatar(person: p, size: 32); Text(p.name) }
+                        HStack(spacing: 12) { Avatar(person: p, size: 34); Text(p.name) }
+                            .padding(.vertical, 2)
                     }
                 }
 
                 Section {
-                    Toggle("Use demo data", isOn: $store.useDemoData)
+                    Toggle(isOn: $store.useDemoData) { SettingLabel("Use demo data", symbol: "play.rectangle.fill", tint: Theme.green) }
                         .onChange(of: store.useDemoData) { Task { await store.refresh() } }
                     if !store.useDemoData {
-                        TextField("Station address", text: $store.backendURL).urlField()
-                            .onSubmit { Task { await store.refresh() } }
-                    }
-                    if let t = store.lastRefresh {
-                        Text("Last updated \(t.formatted(date: .omitted, time: .shortened))")
-                            .font(.footnote).foregroundStyle(.secondary)
+                        HStack(spacing: 12) {
+                            IconBubble(symbol: "antenna.radiowaves.left.and.right", tint: Theme.teal, size: 32)
+                            TextField("Station address", text: $store.backendURL).urlField()
+                                .onSubmit { Task { await store.refresh() } }
+                        }
                     }
                 } header: {
                     Text("Station")
                 }
 
                 Section {
-                    TextField("Speaker address", text: $store.homeURL).urlField()
-                    TextField("Message", text: $message, axis: .vertical)
+                    HStack(spacing: 12) {
+                        IconBubble(symbol: "hifispeaker.fill", tint: Theme.indigo, size: 32)
+                        TextField("Speaker address", text: $store.homeURL).urlField()
+                    }
+                    HStack(alignment: .top, spacing: 12) {
+                        IconBubble(symbol: "text.bubble.fill", size: 32)
+                        TextField("Message", text: $message, axis: .vertical)
+                            .padding(.top, 6)
+                    }
                     Button {
                         sending = true
                         Task { result = await store.announce(message); sending = false }
                     } label: {
-                        Label(sending ? "Sending…" : "Say it in Squint's voice", systemImage: "speaker.wave.2.fill")
+                        SettingLabel(sending ? "Sending…" : "Say it in Squint's voice", symbol: "speaker.wave.2.fill", tint: Theme.coral)
                     }
                     .disabled(sending || message.isEmpty)
                     if let r = result { Text(r).font(.footnote).foregroundStyle(.secondary) }
@@ -59,11 +63,36 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Button("Run setup again") { store.onboarded = false }
+                    Button { store.onboarded = false } label: {
+                        SettingLabel("Run setup again", symbol: "arrow.counterclockwise", tint: Theme.muted)
+                    }
                 }
             }
             .navigationTitle("Settings")
+            .inlineTitle()
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Settings").font(Theme.display(24, .semibold)).foregroundStyle(Theme.ink)
+                }
+            }
             .paperBackground()
+        }
+    }
+}
+
+/// A settings row: an icon bubble and a few words.
+struct SettingLabel: View {
+    let title: String
+    let symbol: String
+    var tint: Color = Theme.accent
+    init(_ title: String, symbol: String, tint: Color = Theme.accent) {
+        self.title = title; self.symbol = symbol; self.tint = tint
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconBubble(symbol: symbol, tint: tint, size: 32)
+            Text(title).foregroundStyle(Theme.ink)
         }
     }
 }

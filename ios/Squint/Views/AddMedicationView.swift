@@ -56,8 +56,6 @@ struct AddMedicationView: View {
                     }
                 } header: {
                     Text("When")
-                } footer: {
-                    Text("At each time the avatar and the Google Home will gently remind them.")
                 }
 
                 Section {

@@ -168,6 +168,8 @@ struct SquintFace: View {
 struct SquintCard: View {
     var state: SquintState
     var badge: String?
+    /// Extra screen at the bottom, for a card that overlaps it (Today's hero).
+    var bottomInset: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 8) {
@@ -189,8 +191,8 @@ struct SquintCard: View {
                 .lineLimit(2)
             }
         }
-        .padding(.horizontal, 20).padding(.top, 34).padding(.bottom, 26)
-        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 280, alignment: .top)
+        .padding(.horizontal, 20).padding(.top, 34).padding(.bottom, 26 + bottomInset)
+        .frame(maxWidth: .infinity, minHeight: 280 + bottomInset, maxHeight: 280 + bottomInset, alignment: .top)
         .background {
             // the Tab5 in its shell: black glass, a soft bezel, a camera dot
             RoundedRectangle(cornerRadius: 34, style: .continuous)
@@ -207,11 +209,7 @@ struct SquintCard: View {
         }
         .overlay(alignment: .topLeading) {
             if let badge {
-                HStack(spacing: 5) {
-                    Circle().fill(badge.contains("LIVE") ? Color(red: 0.42, green: 0.85, blue: 0.55) : .white.opacity(0.5))
-                        .frame(width: 6, height: 6)
-                    Text(badge.replacingOccurrences(of: "● ", with: ""))
-                }
+                Text(badge.replacingOccurrences(of: "● ", with: ""))
                 .font(.system(size: 10, weight: .heavy, design: .rounded)).kerning(1)
                 .foregroundStyle(.white.opacity(0.7))
                 .padding(.horizontal, 9).padding(.vertical, 5)

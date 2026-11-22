@@ -9,15 +9,10 @@ struct TrendsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Eyebrow("Last 30 days")
-                        Text("Routine").font(Theme.display(34)).foregroundStyle(Theme.ink)
-                        Text("Squint compares each week with their own usual, and speaks up only when something changes.")
-                            .font(.subheadline).foregroundStyle(Theme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 12)
+                VStack(alignment: .leading, spacing: Space.section) {
+                    Text("Routine").font(Theme.display(24, .semibold)).foregroundStyle(Theme.ink)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
 
                     if store.insights.isEmpty {
                         empty
@@ -26,12 +21,14 @@ struct TrendsView: View {
 
                     Label("Squint notices changes in a routine. It can't diagnose anything. If a change keeps up, mention it to their doctor.",
                           systemImage: "info.circle")
-                        .font(.footnote).foregroundStyle(Theme.muted)
+                        .font(.subheadline).foregroundStyle(Theme.muted)
+                        .lineSpacing(4)
                         .padding(.horizontal, 6)
                 }
                 .padding(.horizontal, 20).padding(.bottom, 24)
             }
-            .background(Theme.paper.ignoresSafeArea())
+            .statusBarFade()
+            .background(PageBackground())
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { await store.refreshInsights() }
         }
@@ -39,9 +36,9 @@ struct TrendsView: View {
 
     private var empty: some View {
         VStack(spacing: 12) {
-            SquintBadge(mood: .sleep, size: 44)
+            IconBubble(symbol: "chart.xyaxis.line", size: 52)
             Text(store.insightsError == nil ? "No routine yet" : "Couldn't load the routine")
-                .font(Theme.display(20, .bold)).foregroundStyle(Theme.ink)
+                .font(Theme.display(20, .semibold)).foregroundStyle(Theme.ink)
             Text(store.insightsError ?? "Squint needs about two weeks at the counter before it can tell what's usual.")
                 .font(.subheadline).foregroundStyle(Theme.muted).multilineTextAlignment(.center)
         }
@@ -79,162 +76,180 @@ extension InsightLevel {
     }
 }
 
+extension PersonInsight.Signal {
+    /// The icon that says what a signal measures.
+    var symbol: String {
+        switch id {
+        case "taken": "pills.fill"
+        case "late": "clock.fill"
+        case "regularity": "repeat"
+        case "double_dose": "exclamationmark.triangle.fill"
+        case "wrong_bottle": "arrow.left.arrow.right"
+        case "unsure": "questionmark"
+        case "visit_no_dose": "figure.walk"
+        case "finish": "timer"
+        default: "circle.dashed"
+        }
+    }
+
+    /// A calm category colour per signal, so the tiles are easy to tell apart.
+    /// (How serious a change is gets said once, in the card above.)
+    var tint: Color {
+        switch id {
+        case "taken": Theme.green
+        case "late", "finish": Theme.accent
+        case "regularity": Theme.indigo
+        case "double_dose", "wrong_bottle": Theme.coral
+        case "unsure": Theme.pink
+        case "visit_no_dose": Theme.teal
+        default: Theme.accent
+        }
+    }
+}
+
+/// One person's routine: a graph card, then small signal tiles.
 struct InsightCard: View {
     @Environment(AppStore.self) private var store
     let insight: PersonInsight
     @State private var showAll = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
-            Text(insight.headline)
-                .font(Theme.display(19, .bold)).foregroundStyle(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            if !insight.learning {
-                TimingChart(insight: insight)
-                signals
+        VStack(alignment: .leading, spacing: 14) {
+            graphCard
+            if !insight.learning { signals }
+        }
+    }
+
+    private var graphCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                if let p = store.person(insight.person) { Avatar(person: p, size: 42) }
+                TitleBlock(title: insight.name, subtitle: insight.level.label,
+                           subtitleColor: insight.level == .steady ? Theme.muted : insight.level.color)
+                Spacer()
+                SteadinessRing(value: insight.steadiness, color: Theme.personColor(insight.person))
             }
+            VStack(alignment: .leading, spacing: 6) {
+                if let late = insight.signals.first(where: { $0.id == "late" }), !insight.learning {
+                    Text(late.format(late.recent)).font(Theme.number(48)).foregroundStyle(Theme.ink)
+                }
+                Text(insight.headline)
+                    .font(.body).foregroundStyle(Theme.muted)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !insight.learning { TimingChart(insight: insight, color: Theme.personColor(insight.person)) }
         }
         .paperCard()
     }
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            if let p = store.person(insight.person) { Avatar(person: p, size: 40) }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(insight.name).font(Theme.display(20, .bold)).foregroundStyle(Theme.ink)
-                Text(insight.level.label.uppercased())
-                    .font(.system(size: 11, weight: .heavy, design: .rounded)).kerning(1)
-                    .foregroundStyle(insight.level.color)
+    private var signals: some View {
+        // Timing is already the big number on the graph card.
+        let shown = insight.signals.filter { $0.id != "late" }
+        let moved = shown.filter { $0.level != .steady }
+        let rest = shown.filter { $0.level == .steady }
+        return VStack(spacing: 14) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
+                ForEach(moved + (showAll ? rest : [])) { SignalTile(signal: $0) }
             }
-            Spacer()
-            SteadinessRing(value: insight.steadiness, color: insight.level.color)
+            if !rest.isEmpty {
+                Button {
+                    withAnimation(.snappy) { showAll.toggle() }
+                } label: {
+                    Label(showAll ? "Show less" : moved.isEmpty ? "Show all \(rest.count)" : "Show \(rest.count) steady",
+                          systemImage: showAll ? "chevron.up" : "chevron.down")
+                        .font(.subheadline.weight(.medium)).foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 18).padding(.vertical, 12)
+                        .background(Theme.accentSoft, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
+}
 
-    private var signals: some View {
-        let moved = insight.signals.filter { $0.level != .steady }
-        let rest = insight.signals.filter { $0.level == .steady }
-        return VStack(spacing: 0) {
-            ForEach(moved + (showAll ? rest : [])) { s in
-                SignalRow(signal: s)
-                Divider().overlay(Theme.line)
+/// A small tile: what it measures (icon + name) and this week's value.
+struct SignalTile: View {
+    let signal: PersonInsight.Signal
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            IconBubble(symbol: signal.symbol, tint: signal.tint, size: 38)
+            Spacer(minLength: 12)
+            // Label and value as one pair: small label, 2 pt gap, big value.
+            VStack(alignment: .leading, spacing: 2) {
+                Text(signal.title).font(.system(size: 13, design: .rounded)).foregroundStyle(Theme.muted)
+                    .lineLimit(1).minimumScaleFactor(0.75)
+                Text(signal.format(signal.recent)).font(Theme.number(30)).foregroundStyle(Theme.ink)
+                    .lineLimit(1).minimumScaleFactor(0.7)
             }
-            Button {
-                withAnimation(.snappy) { showAll.toggle() }
-            } label: {
-                HStack {
-                    Text(showAll ? "Show less" : moved.isEmpty ? "Show all \(rest.count) signals" : "Show \(rest.count) steady signals")
-                    Spacer()
-                    Image(systemName: showAll ? "chevron.up" : "chevron.down")
-                }
-                .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.muted)
-                .padding(.vertical, 10)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
         }
+        .padding(18)
+        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150, alignment: .topLeading)
+        .widgetBackground(26)
+        .accessibilityElement(children: .combine)
     }
 }
 
 /// 0–100 ring: how close this week is to their usual.
 struct SteadinessRing: View {
     let value: Int?
-    let color: Color
+    var color: Color = Theme.accent
 
     var body: some View {
         ZStack {
-            Circle().stroke(Theme.line, lineWidth: 5)
+            Circle().stroke(color.opacity(0.14), lineWidth: 5)
             Circle().trim(from: 0, to: CGFloat(value ?? 0) / 100)
                 .stroke(color, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-            VStack(spacing: -2) {
-                Text(value.map(String.init) ?? "–").font(Theme.display(17)).foregroundStyle(Theme.ink)
-                Text("of 100").font(.system(size: 8, weight: .bold, design: .rounded)).foregroundStyle(Theme.muted)
-            }
+            Text(value.map(String.init) ?? "–").font(Theme.number(16)).foregroundStyle(Theme.ink)
         }
-        .frame(width: 54, height: 54)
+        .frame(width: 48, height: 48)
         .accessibilityElement()
         .accessibilityLabel("Steadiness \(value ?? 0) out of 100")
     }
 }
 
-/// Minutes late per day, the usual as a dashed line, and dots on days something went wrong.
+/// Minutes late per day, in the person's colour, with the usual as a dashed line.
 struct TimingChart: View {
     let insight: PersonInsight
+    var color: Color = Theme.accent
 
     var body: some View {
         let pts = insight.daily.filter { $0.lateMin != nil }
         let lates = pts.compactMap(\.lateMin) + [insight.usualLate ?? 0]
         let lo = min(0, (lates.min() ?? 0) - 5), hi = max(30, (lates.max() ?? 0) + 10)
-        VStack(alignment: .leading, spacing: 6) {
-            Text("How late, each day").font(.caption.weight(.bold)).foregroundStyle(Theme.muted)
-            Chart {
-                ForEach(pts) { d in
-                    AreaMark(x: .value("Day", d.day, unit: .day), y: .value("Min late", d.lateMin ?? 0))
-                        .foregroundStyle(LinearGradient(colors: [insight.level.color.opacity(0.25), .clear],
-                                                        startPoint: .top, endPoint: .bottom))
-                        .interpolationMethod(.monotone)
-                    LineMark(x: .value("Day", d.day, unit: .day), y: .value("Min late", d.lateMin ?? 0))
-                        .foregroundStyle(Theme.ink)
-                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
-                        .interpolationMethod(.monotone)
-                }
-                if let u = insight.usualLate {
-                    RuleMark(y: .value("Usual", u))
-                        .foregroundStyle(Theme.muted)
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                        .annotation(position: .top, alignment: .leading) {
-                            Text("usual").font(.caption2.weight(.bold)).foregroundStyle(Theme.muted)
-                        }
-                }
-                ForEach(insight.daily.filter { $0.doubleDose + $0.wrongBottle > 0 }) { d in
-                    PointMark(x: .value("Day", d.day, unit: .day), y: .value("Min late", d.lateMin ?? 0))
-                        .foregroundStyle(Theme.flagged)
-                        .symbolSize(40)
-                }
+        Chart {
+            ForEach(pts) { d in
+                AreaMark(x: .value("Day", d.day, unit: .day), y: .value("Min late", d.lateMin ?? 0))
+                    .foregroundStyle(LinearGradient(colors: [color.opacity(0.22), color.opacity(0)],
+                                                    startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.catmullRom)
+                LineMark(x: .value("Day", d.day, unit: .day), y: .value("Min late", d.lateMin ?? 0))
+                    .foregroundStyle(color)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .interpolationMethod(.catmullRom)
             }
-            .chartYScale(domain: lo...hi)
-            .chartYAxis {
-                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { v in
-                    AxisGridLine().foregroundStyle(Theme.line)
-                    AxisValueLabel { if let m = v.as(Double.self) { Text("\(Int(m))m") } }
-                }
-            }
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: 7)) { _ in
-                    AxisValueLabel(format: .dateTime.month(.abbreviated).day())
-                }
-            }
-            .frame(height: 140)
-            HStack(spacing: 6) {
-                Circle().fill(Theme.flagged).frame(width: 7, height: 7)
-                Text("double-dose attempt or mix-up").font(.caption2).foregroundStyle(Theme.muted)
+            if let u = insight.usualLate {
+                RuleMark(y: .value("Usual", u))
+                    .foregroundStyle(Theme.muted.opacity(0.6))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
             }
         }
+        .chartYScale(domain: lo...hi)
+        .chartYAxis {
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { v in
+                AxisGridLine().foregroundStyle(Theme.line)
+                AxisValueLabel { if let m = v.as(Double.self) { Text("\(Int(m))m") } }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+            }
+        }
+        .frame(height: 150)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Chart of how late each day's doses were")
-    }
-}
-
-struct SignalRow: View {
-    let signal: PersonInsight.Signal
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Circle().fill(signal.level.color).frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(signal.title).font(.body.weight(.semibold)).foregroundStyle(Theme.ink)
-                Text("usually \(signal.format(signal.usual))").font(.footnote).foregroundStyle(Theme.muted)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(signal.format(signal.recent)).font(Theme.display(16, .bold))
-                    .foregroundStyle(signal.level == .steady ? Theme.ink : signal.level.color)
-                Text("this week").font(.caption2).foregroundStyle(Theme.muted)
-            }
-        }
-        .padding(.vertical, 10)
-        .accessibilityElement(children: .combine)
     }
 }

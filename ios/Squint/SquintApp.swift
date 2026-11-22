@@ -8,7 +8,7 @@ struct SquintApp: App {
         WindowGroup {
             RootView()
                 .environment(store)
-                .tint(Theme.ink)
+                .tint(Theme.accent)
                 .fontDesign(.rounded)
         }
     }
@@ -22,10 +22,10 @@ struct RootView: View {
         case today = "Today", trends = "Trends", medications = "Medicines", settings = "Settings"
         var icon: String {
             switch self {
-            case .today: "eyes"
-            case .trends: "chart.line.uptrend.xyaxis"
+            case .today: "house.fill"
+            case .trends: "chart.xyaxis.line"
             case .medications: "pills.fill"
-            case .settings: "slider.horizontal.3"
+            case .settings: "gearshape.fill"
             }
         }
     }
@@ -46,50 +46,35 @@ struct RootView: View {
                 OnboardingView()
             }
         }
-        .background(Theme.paper.ignoresSafeArea())
+        .background(PageBackground())
         .task { await store.refresh() }
         .task(id: store.useDemoData) {
             if !store.useDemoData { await store.followStation() }
         }
     }
 
-    /// A dot on a tab that has something for the caregiver: red for today's alerts, amber/red for routine.
-    private func badge(for t: Tab) -> Color? {
-        switch t {
-        case .today: store.attention.isEmpty ? nil : Theme.flagged
-        case .trends: store.routineAlert?.level.color
-        default: nil
-        }
-    }
-
-    /// A floating ink capsule instead of the stock tab bar.
+    /// A floating dark capsule of icons, no words. The open tab sits in a blue circle.
+    /// (VoiceOver still reads each tab's name.)
     private var tabBar: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 10) {
             ForEach(Tab.allCases, id: \.self) { t in
                 Button {
                     withAnimation(.spring(duration: 0.3)) { tab = t }
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: t.icon).font(.system(size: 16, weight: .bold))
-                        if tab == t { Text(t.rawValue).font(Theme.display(15, .bold)).lineLimit(1) }
-                    }
-                    .foregroundStyle(tab == t ? Theme.ink : Theme.paper.opacity(0.7))
-                    .padding(.horizontal, tab == t ? 18 : 16).padding(.vertical, 12)
-                    .background { if tab == t { Capsule().fill(Theme.paper) } }
-                    .overlay(alignment: .topTrailing) {
-                        if tab != t, let c = badge(for: t) {
-                            Circle().fill(c).frame(width: 8, height: 8).offset(x: -8, y: 6)
-                        }
-                    }
-                    .contentShape(Capsule())
+                    Image(systemName: t.icon)
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(tab == t ? Color.white : Color.white.opacity(0.6))
+                        .frame(width: 54, height: 54)
+                        .background { if tab == t { Circle().fill(Theme.accent) } }
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(t.rawValue)
                 .accessibilityAddTraits(tab == t ? .isSelected : [])
             }
         }
-        .padding(5)
-        .background(Theme.ink, in: Capsule())
+        .padding(6)
+        .background(Theme.navBar, in: Capsule())
         .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
         .padding(.bottom, 4)
         .sensoryFeedback(.selection, trigger: tab)
