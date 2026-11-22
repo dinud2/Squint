@@ -213,6 +213,7 @@ def make_handler(hub, bottles=None, coord=None):
                     hub.publish({"type": "intake", "person": b.get("person"), "confidence": float(b.get("confidence", 0))})
                     return self._json({"ok": True})
                 r = coord.confirm(b.get("med"), b.get("for"), bool(b.get("taken", True)))
+                print(f"[confirm] from {self.client_address[0]} {b} -> {r.get('error') or r.get('status')}", flush=True)
                 return self._json(r, 400 if "error" in r else 200)
             if bottles is None:
                 return self._json({"error": "bottle recognition is not running"}, 503)
