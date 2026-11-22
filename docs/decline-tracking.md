@@ -74,8 +74,8 @@ Everybody's routine is different. Squint compares each person **with themselves*
 
 ## Do the models need to change?
 
-Mostly no: the signals come from what the coordinator already decides. Three things would make
-them better. In order of value:
+Mostly no: the signals come from what the coordinator already decides. Two things would make
+them better, and one is done:
 
 1. **Who did it, when two people are at the counter.**
    - Today a bottle is matched to "whoever is present". With both partners there, a mix-up and a
@@ -85,10 +85,11 @@ them better. In order of value:
      `service.py`, no retraining.
    - Until then, events with two people present are logged with `who: [both]` and left out of
      per-person signals.
-2. **Actual intake (hand to mouth).**
-   - `POST /intake` is still faked. "Picked up and confirmed on the Tab5" is a good proxy, but a
-     real intake check separates *took it* from *said they took it*.
-   - The pose model from v1 (MoveNet, in the `archive/old-idea` tag) can be brought back for this.
+2. **Actual intake (hand to mouth): done.**
+   - `buddy/intake.py` watches for a palm near the mouth after the right bottle
+     ([models.md](models.md#3-did-they-take-it-hand-to-mouth-buddyintakepy)). The journal records
+     how each dose was confirmed (`how: auto` or `tab5`), which separates *took it* from *said
+     they took it*.
 3. **Bottle put back without taking it.**
    - The bottle tracker already knows when a bottle leaves the view.
    - Logging "shown, then gone, with no confirmation within 60 s" as `unsure` needs no new model.

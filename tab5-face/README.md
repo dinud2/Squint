@@ -16,7 +16,7 @@ This sketch shows the companion's face on an **upright** Tab5 (720 × 1280).
 | `away` (the person left) | If idle: sleeps after 10 s. A reminder or STOP is not cut short. |
 | Nothing for 1 min while idle | Falls asleep. |
 
-The Pi sends `presence` and `away` from its ultrasonic sensor (or the camera when it sees a face).
+The Pi sends `presence` and `away` when its camera sees someone arrive or leave.
 Change the times in `Reactions.h` (`kAwakeMs`, `kAfterAwayMs`) and the brightness in `tab5-face.ino` (`kAwakeBrightness`, `kSleepBrightness`).
 
 ![Animated preview](docs/preview.gif) ![All reactions](docs/all-reactions.png)
@@ -36,7 +36,7 @@ These images come from the desktop preview. They are not from the Tab5.
 | `stop` | Red verdict / STOP | shocked + flashing red frame | red | "STOP" / "Already taken" | 30 s or until the next event |
 | `wrong` | Another person's bottle | embarrassed (eyes look away) | amber | "Not your pills" | 10 s |
 | `ask Tylenol\|Did you take it?` | The right bottle was picked up | small eyes + Yes / No buttons | white | the med name, the question | Until the Pi's next line (`happy` after Yes, `idle` after No) |
-| `taken Motrin\|Did you take it?` | Hand-to-mouth ≥ 90% sure | same, Yes pre-selected, ticks itself after 2 s | white | the med name, the question | 2 s + green check, then "Well done!" (only a No tap is sent) |
+| `taken Motrin\|Did you take it?` | Hand-to-mouth ≥ 75% sure | same, Yes pre-selected, ticks itself after 2 s | white | the med name, the question | 2 s + green check, then "Well done!" (only a No tap is sent) |
 
 Timed reactions go back to `idle`. `idle` goes back to `sleep`.
 
