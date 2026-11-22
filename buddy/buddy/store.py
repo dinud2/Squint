@@ -156,6 +156,21 @@ class Store:
     def taken_today(self, mid, pid, now=None):
         return [d for d in self.today(now) if d["med"] == mid and d["for"] == pid and d["status"] in ("taken", "flagged")]
 
+    def flag(self, mid, pid, reason, now=None):
+        """A dose already taken today had something worth telling the caregiver (a second dose
+        stopped): it stays taken, but /today says "flagged" with the reason. -> the Dose, or None."""
+        now = now or time.time()
+        done = self.taken_today(mid, pid, now)
+        if not done:
+            return None
+        d = done[-1]
+        day = time.strftime("%Y-%m-%d", time.localtime(now))
+        with self.lock:
+            self.d["log"].setdefault(day, {})[f"{mid}|{pid}|{d['due']}"] = {
+                "status": "flagged", "at": d["at"], "reason": reason}
+            self._save()
+        return {**d, "status": "flagged", "reason": reason}
+
     def mark(self, mid, pid, status="taken", reason=None, now=None):
         """Mark the earliest open dose of this med for this person. -> the Dose, or None."""
         now = now or time.time()

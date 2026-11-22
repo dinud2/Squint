@@ -246,6 +246,9 @@ class Coordinator:
         if taken and (m.get("risk") == "high" or not open_this):
             at = taken[-1]["at"]
             self.log("double_dose", owner, med=bottle, first_at=at)
+            # the app (and its notification) only hear about it through /today
+            self.store.flag(bottle, owner, f"{oname} picked up {mname} again at {time.strftime('%H:%M')}. "
+                                           f"It was already taken at {at}, so Squint stopped it.")
             self.show(f"stop Already taken|{mname} at {at}")
             self.say(f"Stop, {oname}. You already took your {mname} at {at}.")
             return
