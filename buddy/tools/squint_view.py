@@ -97,13 +97,21 @@ def draw(frame, pi):
         label(frame, names[0].title() if named else "?", (x, max(24, y - 8)), col)
     # bottle box
     b = pi.bottle if pi.ok else {}
-    x0, y0, x1, y1 = int(CENTER[0] * w), int(CENTER[1] * h), int(CENTER[2] * w), int(CENTER[3] * h)
     named = b.get("name") not in (None, "unknown") and b.get("age_s", 9) < 2
-    cv2.rectangle(frame, (x0, y0), (x1, y1), GREEN if named else GREY, 3 if named else 1)
-    if named:
-        label(frame, f"{NAMES.get(b['name'], b['name'])}  {b['score']:.0%}", (x0 + 6, y1 - 12), GREEN, 0.8)
-    else:
-        label(frame, "hold the bottle here", (x0 + 6, y1 - 12), GREY, 0.55, 1)
+    if "box" in b:                       # colour mode: the bottle can be anywhere (box in 960x544 px)
+        if named and any(b["box"]):
+            sx, sy = w / 960, h / 544
+            x0, y0, x1, y1 = b["box"]
+            x0, y0, x1, y1 = int(x0 * sx) - 12, int(y0 * sy) - 12, int(x1 * sx) + 12, int(y1 * sy) + 12
+            cv2.rectangle(frame, (x0, y0), (x1, y1), GREEN, 3)
+            label(frame, NAMES.get(b["name"], b["name"]), (x0, max(60, y0 - 8)), GREEN, 0.8)
+    else:                                # show mode: the fixed box in the middle
+        x0, y0, x1, y1 = int(CENTER[0] * w), int(CENTER[1] * h), int(CENTER[2] * w), int(CENTER[3] * h)
+        cv2.rectangle(frame, (x0, y0), (x1, y1), GREEN if named else GREY, 3 if named else 1)
+        if named:
+            label(frame, f"{NAMES.get(b['name'], b['name'])}  {b['score']:.0%}", (x0 + 6, y1 - 12), GREEN, 0.8)
+        else:
+            label(frame, "hold the bottle here", (x0 + 6, y1 - 12), GREY, 0.55, 1)
     # top bar: who is here, what is being asked
     d = pi.doses if pi.ok else {}
     here = [n.title() for n in d.get("at_counter", [])]

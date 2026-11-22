@@ -126,8 +126,9 @@ def main():
     ap.add_argument("--bottle-source", default="http://localhost:8080/stream",
                     help="camera looking down at the counter ('' = only frames POSTed to /tab5/frame)")
     ap.add_argument("--bottle-fps", type=float, default=4.0)
-    ap.add_argument("--bottle-mode", choices=("show", "counter"), default="show",
-                    help="show: bottle held up to the camera; counter: bottles stand under it")
+    ap.add_argument("--bottle-mode", choices=("color", "show", "counter"), default="color",
+                    help="color: bottle anywhere, by label colour (default); show: held up in the "
+                         "centre box; counter: bottles stand under it")
     ap.add_argument("--face-source", default="", help="camera looking at the person ('' = off)")
     ap.add_argument("--port", type=int, default=8081)
     ap.add_argument("--det-scale", type=float, default=0.5, help="detect faces on a smaller frame (faster)")

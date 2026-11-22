@@ -27,11 +27,12 @@ import cv2
 import numpy as np
 
 from .bottle_tracker import BottleTracker
+from . import colors
 from .bottles import GALLERY_DIR, Classifier, Embedder, Gallery, crop
 
 # Every frame a bottle is named in ("bottle_shown"), so a misread can be looked at later.
 SHOWN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "shown")
-SHOWN_KEEP = 60
+SHOWN_KEEP = 120   # photo + clean copy (raw/) each
 
 
 def save_shown(img, box, ev, scores):
@@ -43,7 +44,11 @@ def save_shown(img, box, ev, scores):
         cv2.putText(view, top, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
         name = time.strftime("%H%M%S") + f"_{ev['bottle']}_{ev['score']:.2f}.jpg"
         cv2.imwrite(os.path.join(SHOWN_DIR, name), view)
-        old = sorted(os.listdir(SHOWN_DIR))[:-SHOWN_KEEP]
+        os.makedirs(os.path.join(SHOWN_DIR, "raw"), exist_ok=True)      # unmarked, for testing
+        cv2.imwrite(os.path.join(SHOWN_DIR, "raw", name), img)
+        for f in sorted(os.listdir(os.path.join(SHOWN_DIR, "raw")))[:-SHOWN_KEEP // 2]:
+            os.remove(os.path.join(SHOWN_DIR, "raw", f))
+        old = sorted(f for f in os.listdir(SHOWN_DIR) if f.endswith(".jpg"))[:-SHOWN_KEEP // 2]
         for f in old:
             os.remove(os.path.join(SHOWN_DIR, f))
     except Exception as e:                      # never let a debug photo stop recognition
@@ -108,7 +113,7 @@ class BottleService:
         self.mode = mode
         self.emb, self.gallery = Embedder(), Gallery(center=(mode == "show"))
         # A classifier trained on the laptop replaces gallery matching in show mode when present.
-        self.clf = Classifier() if (mode == "show" and Classifier.available()) else None
+        self.clf = Classifier() if (mode in ("show", "color") and Classifier.available()) else None
         self.det = None
         if mode == "counter":
             from .detector import NanoDet
@@ -131,7 +136,25 @@ class BottleService:
         self.last_img = img
         t0 = time.time()
         with self.lock:
-            if self.mode == "show":
+            if self.mode == "color":
+                # Anywhere in the picture, by label colour (colors.py): blue = Advil, orange =
+                # Motrin, red = Tylenol or Vitamin D (the classifier picks, on a crop around it).
+                name, info = colors.identify(img, self.clf)
+                box = info.get("box") or [0, 0, 0, 0]
+                score = 0.9 if name else 0.0
+                if name and "red" in info:
+                    score = max(info["red"]["tylenol"], info["red"]["vitamind"])
+                sc = {name: score} if name else {"nothing": 1.0}
+                name = name or "unknown"
+                out = [{"name": name, "score": round(score, 3), "box": box}]
+                events = self.show.update(time.time(), name, score)
+                for ev in events:
+                    save_shown(img, box, ev, sc)
+                on_counter = []
+                self.last = {"name": name, "score": round(score, 3), "t": time.time(), "shown": self.show.shown,
+                             "scores": {k: round(v, 3) for k, v in sc.items()}, "box": box,
+                             "candidates": info.get("candidates"), "red": info.get("red")}
+            elif self.mode == "show":
                 c, box = center_crop(img)
                 if self.clf is not None:
                     sc = self.clf(c)
@@ -182,7 +205,7 @@ class BottleService:
             return {"error": "no photo: send a JPEG, or run the bottle camera loop"}
         box = None
         with self.lock:
-            if self.mode == "show":
+            if self.mode in ("show", "color"):
                 c, box = center_crop(img)        # exactly what recognition looks at
                 crops = [c]
             else:
