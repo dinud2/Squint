@@ -11,12 +11,7 @@ We say both out loud in the demo, not just in Q&A.
 | Track | What its judges look for | Our answer in one line |
 |---|---|---|
 | **QNX** | Real use of QNX on embedded hardware: its APIs, its real-time scheduling, reliability, not "Linux with a different logo". | The whole product runs on a Raspberry Pi 5 under QNX 8. We wrote the camera driver client against QNX's native camera API, run it at real-time priority so AI work can't starve it, and the system restarts itself through QNX's own tools. |
-| **Health hack** (Sun Life, see note) | Real health impact, a real user, something people would use. | Medication errors put older people in hospital every day. Squint stops the most dangerous one, the double dose, at the moment it happens, using the bottles they already have, and tells the family. |
-
-> **Check the sponsor:** we couldn't open this year's Devpost prize page. At Hack Western 10 and 12
-> the health prize was **Sun Life's "Best Health Hack"**; Canada Life's tracks have been mental
-> well-being, investing and the workplace. Confirm on Devpost or at the opening and change the name
-> here if it's different.
+| **Best Health Hack** (Sun Life) | Real health impact, a real user, something people would use. | Medication errors put older people in hospital every day. Squint stops the most dangerous one, the double dose, at the moment it happens, using the bottles they already have, and tells the family. |
 
 ## Who does what
 
