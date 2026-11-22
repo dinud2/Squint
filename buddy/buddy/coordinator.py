@@ -227,10 +227,10 @@ class Coordinator:
             self.show(f"wrong {oname}'s pills|That's {oname}'s {mname}")
             self.say(f"Careful {who}, that's {oname}'s {mname}.")
             return
-        if self.demo:                           # their own medicine: that's all the demo checks
+        if self.demo:                           # their own medicine: confirm, then ask (no dose times)
             self.log("right_bottle", owner, med=bottle)
-            self.show(f"happy That's yours|{mname}")
             self.say(f"Yes {oname}, that's your {mname}.")
+            self._ask(bottle, owner, mname)
             return
         taken = self.store.taken_today(bottle, owner)
         open_this = [d for d in self.store.open_doses(owner) if d["med"] == bottle]
@@ -249,9 +249,12 @@ class Coordinator:
             self.show(f"stop Already taken|{mname} at {at}")
             self.say(f"Stop, {oname}. You already took your {mname} at {at}.")
             return
+        self.log("bottle", owner, med=bottle)
+        self._ask(bottle, owner, mname)
+
+    def _ask(self, bottle, owner, mname):
         with self.lock:
             p = self.pending = {"med": bottle, "for": owner, "t": time.time()}
-        self.log("bottle", owner, med=bottle)
         self.show(f"ask {mname}|Did you take it?")   # Tab5: Yes / No, waits for a tap
         tm = threading.Timer(UNSURE_AFTER_S, self._never_answered, args=(p,))
         tm.daemon = True                        # never keeps the service from shutting down
@@ -300,6 +303,14 @@ class Coordinator:
             self.log("unsure", person, med=med, reason="said_no")
             self.show("idle")
             return {"med": med, "for": person, "status": "due"}
+        if self.demo:                           # demo: no dose log, no schedule, just praise
+            self.log("dose_demo", person, med=med, how=how)
+            self.hub.publish({"type": "dose_taken", "med": med, "for": person, "at": time.strftime("%H:%M"),
+                              "how": how, "demo": True})
+            if how != "auto":
+                self.show(f"happy Well done!|{m['name']}")
+            self.say(f"Well done, {self.store.name(person)}.")
+            return {"med": med, "for": person, "status": "taken", "demo": True}
         d = self.store.mark(med, person, "taken", reason=None if how != "auto" else None)
         if d is None:
             return {"error": f"no open dose of {med} for {person} today"}
