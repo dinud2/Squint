@@ -29,6 +29,26 @@ import numpy as np
 from .bottle_tracker import BottleTracker
 from .bottles import GALLERY_DIR, Classifier, Embedder, Gallery, crop
 
+# Every frame a bottle is named in ("bottle_shown"), so a misread can be looked at later.
+SHOWN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "shown")
+SHOWN_KEEP = 60
+
+
+def save_shown(img, box, ev, scores):
+    try:
+        os.makedirs(SHOWN_DIR, exist_ok=True)
+        top = " ".join(f"{k} {v:.2f}" for k, v in sorted(scores.items(), key=lambda kv: -kv[1])[:3])
+        view = img.copy()
+        cv2.rectangle(view, (box[0], box[1]), (box[2], box[3]), (0, 200, 0), 2)
+        cv2.putText(view, top, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        name = time.strftime("%H%M%S") + f"_{ev['bottle']}_{ev['score']:.2f}.jpg"
+        cv2.imwrite(os.path.join(SHOWN_DIR, name), view)
+        old = sorted(os.listdir(SHOWN_DIR))[:-SHOWN_KEEP]
+        for f in old:
+            os.remove(os.path.join(SHOWN_DIR, f))
+    except Exception as e:                      # never let a debug photo stop recognition
+        print("[bottles] could not save shown frame:", e, flush=True)
+
 OTHER = "_other"          # the "not a medicine" class: never reported as a bottle
 CLASSIFIER_MIN = 0.65     # trained classifier: held-out photos at 0.6-0.9 -> 0 wrong bottles, 0 no-medicine named
 # The box the bottle is held in, close to the camera (~20-30 cm) so it FILLS the box. The first
@@ -124,6 +144,8 @@ class BottleService:
                     name = "unknown"
                 out = [{"name": name, "score": round(score, 3), "box": box}]
                 events = self.show.update(time.time(), name, score)
+                for ev in events:
+                    save_shown(img, box, ev, sc)
                 on_counter = []
                 self.last = {"name": name, "score": round(score, 3), "t": time.time(), "shown": self.show.shown,
                              "scores": {k: round(v, 3) for k, v in sorted(sc.items(), key=lambda kv: -kv[1])}}
