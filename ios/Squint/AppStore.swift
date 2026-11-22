@@ -66,6 +66,7 @@ final class AppStore {
             people = ppl
             medications = try await m
             doses = try await t
+            Notifier.shared.update(doses: doses, people: people, medications: medications)
             lastError = nil
             lastRefresh = Date()
             let g = Glance.make(people: people, medications: medications, doses: doses)
@@ -175,6 +176,15 @@ final class AppStore {
         }
     }
 
+    /// While the app is open in live mode: check the station every 30 s, so a missed dose
+    /// (which changes no face on the Tab5) still reaches the caregiver quickly.
+    func pollWhileOpen() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(30))
+            if !useDemoData { await refresh() }
+        }
+    }
+
     /// Margaret's morning in 20 seconds: every face Squint can make, for showing people the app.
     func playDemo() async {
         let scenes: [(SquintState, Double)] = [
@@ -189,6 +199,14 @@ final class AppStore {
         for (s, secs) in scenes {
             if Task.isCancelled { break }
             demoScene = s
+            // what Maya's phone would say at the same moment
+            switch s.mood {
+            case .happy: Notifier.shared.demo(title: "Margaret took Warfarin", body: "At 8:02 AM. Squint saw it.", urgent: false)
+            case .stop: Notifier.shared.demo(title: "Squint stepped in for Margaret",
+                                             body: "She picked up her Warfarin again. It was already taken at 8:02, so Squint stopped her.",
+                                             urgent: true)
+            default: break
+            }
             try? await Task.sleep(for: .seconds(secs))
         }
         demoScene = nil
