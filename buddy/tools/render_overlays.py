@@ -295,7 +295,7 @@ def probe(path):
     return float(j["format"]["duration"]), float(num) / float(den)
 
 
-def do_take(mp4, meds, shift):
+def do_take(mp4, meds, shift, extra=()):
     base = os.path.splitext(mp4)[0]
     jsonl = base + ".jsonl"
     if not os.path.exists(jsonl):
@@ -304,6 +304,7 @@ def do_take(mp4, meds, shift):
     duration, fps = probe(mp4)
     states, events, _ = load(jsonl)
     bottles, tags, badges, lines = build(states, events, meds, shift, duration)
+    lines = sorted(lines + list(extra))         # --say: added lines, at video time (no shift)
     print(f"{os.path.basename(mp4)}: {duration:.1f} s @ {fps:g} fps | bottles {len(bottles)}, "
           f"counter tags {len(tags)}, badges {[b['text'] for b in badges]}, lines {[s for _, s in lines]}")
     fonts = (font("Bold", 38), font("Bold", 40), font("Bold", 42), font("Medium", 22))
@@ -336,14 +337,20 @@ def main():
     ap.add_argument("--shift", type=float, default=-0.3,
                     help="move overlays and voice by this many seconds (Squint reads ~0.3 s after the moment)")
     ap.add_argument("--pi", default="172.20.10.9", help="asked for the medication list (owners)")
+    ap.add_argument("--say", action="append", default=[], metavar="SECONDS|TEXT",
+                    help="add a spoken line at this time of the video, e.g. '2.4|Hi Dinu.' (repeatable)")
     a = ap.parse_args()
     takes = a.takes or sorted(f for f in glob.glob(os.path.join(a.dir, "take_*.mp4"))
                               if not f.endswith(("_preview.mp4",)))
     if not takes:
         sys.exit(f"no takes in {a.dir}")
     meds = meds_from_pi(a.pi)
+    extra = []
+    for x in a.say:
+        t, _, text = x.partition("|")
+        extra.append((float(t), text.strip()))
     for mp4 in takes:
-        do_take(mp4, meds, a.shift)
+        do_take(mp4, meds, a.shift, extra)
 
 
 if __name__ == "__main__":
