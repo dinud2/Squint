@@ -1,8 +1,17 @@
 # Live demo shortcuts (run from the repo root). PI=<address> overrides the Pi's address.
+SHELL := /bin/bash
 PI ?= 172.20.10.9
+.DEFAULT_GOAL := demo
 SSH = ssh -o ConnectTimeout=10 qnxuser@$(PI)
 
-.PHONY: demo reset view pi-start health logs restore qnx
+.PHONY: demo reset view pi-start health logs restore qnx find-pi
+
+find-pi:   ## which address the Pi (SSH :22) and Squint (:8081) are on, on this hotspot
+	@net=$$(ip -4 -o addr show | awk '/172\.20\.10\./ {print $$4}' | cut -d/ -f1 | cut -d. -f1-3); \
+	[ -n "$$net" ] || net=172.20.10; echo "scanning $$net.1-14 ..."; \
+	for i in $$(seq 1 14); do ( a=$$net.$$i; \
+	  curl -s -m 2 http://$$a:8081/health | grep -q '"ok"' && echo "$$a  Squint running  ->  make demo PI=$$a"; \
+	  (echo > /dev/tcp/$$a/22) 2>/dev/null && echo "$$a  SSH open (the Pi?)" ) & done; wait
 
 demo:      ## reset today and launch everything (waits for the Pi, starts Squint if needed)
 	PI=$(PI) buddy/tools/demo_time.sh
