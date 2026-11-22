@@ -276,7 +276,7 @@ class Coordinator:
         if confidence >= AUTO_CONFIRM:
             # Tab5: Yes / No with Yes ticking itself after AUTO_DELAY_S; the Pi records it unless
             # the person taps No first (that clears pending, and the timer then does nothing).
-            self.show(f"taken {self.store.med(p['med'])['name']}|Did you take it?")
+            self.show(f"taken {self.store.med(p['med'])['name']}|I saw you take it!")
             threading.Timer(AUTO_DELAY_S, self._auto_confirm, args=(p,)).start()
 
     def _auto_confirm(self, p):

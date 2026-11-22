@@ -31,7 +31,7 @@ enum class Phase {
 };
 
 constexpr uint32_t kAutoMs = 2000;          // "taken": Yes ticks itself after this
-constexpr uint32_t kAutoShowMs = 1500;      // then the green check stays this long
+constexpr uint32_t kAutoShowMs = 2500;      // then the big green "Taken!" banner stays this long
 constexpr uint32_t kAnswerTimeoutMs = 8000;  // the Pi did not answer a tap: back to idle
 
 struct State {

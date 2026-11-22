@@ -12,7 +12,7 @@ Runs on the same camera frames as face recognition, but only while a dose is wai
 
 Result, once per waiting dose (event "intake" -> coordinator.on_intake):
   2+ "at mouth" frames, at least one confident palm (>= PALM_SURE),
-  or one very confident palm (>= PALM_CERTAIN)                    -> 0.95: auto-confirm
+  or 3+ "at mouth" frames, or one very confident palm (>= PALM_CERTAIN) -> 0.95: auto-confirm
   1 frame, or only unsure palms                                    -> 0.75: Tab5 asks
 """
 import os
@@ -29,6 +29,8 @@ NEAR = 0.45          # face widths between the palm box and the mouth point (0.2
 PALM_SURE = 0.70
 PALM_CERTAIN = 0.85  # one at-mouth frame with a palm this confident is enough on its own
 SURE_FRAMES = 2      # at-mouth frames -> 0.95 (auto-confirm), if at least one palm is >= PALM_SURE
+MANY_FRAMES = 3      # ...or this many at-mouth frames, whatever the palm scores: a hand bringing a pill
+                     # up shows its side / back, and live it gave 3 frames all under 0.70 (2026-11-21)
 CROP_FW = 4.0        # the palm detector looks at a square this many face widths wide around the
                      # mouth: on the whole 960x544 frame (shrunk to 192 px) a hand was ~15 px
 FOLLOW_FW = 1.5      # an unnamed face this close to the last mouth position is the same person
@@ -80,10 +82,10 @@ class HandToMouth:
         if self.hits and t - self.last_hit_t >= SETTLE_S:
             sure = sum(s >= PALM_SURE for s in self.hits)
             certain = max(self.hits) >= PALM_CERTAIN
-            conf = 0.95 if (len(self.hits) >= SURE_FRAMES and sure >= 1) or certain else 0.75
+            conf = 0.95 if (len(self.hits) >= SURE_FRAMES and sure >= 1) or certain or len(self.hits) >= MANY_FRAMES else 0.75
             self.reported = True
             return {"type": "intake", "person": pending["for"], "confidence": conf,
-                    "frames": len(self.hits), "sure_frames": sure}
+                    "frames": len(self.hits), "sure_frames": sure, "palms": [round(x, 2) for x in self.hits]}
         # The person the dose is for. A hand near the face often makes it "unknown" for a few
         # frames, so once found, follow whichever face is where they were.
         face = next((f for f, name, _, _ in seen if name == pending["for"]), None)
