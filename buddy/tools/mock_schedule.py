@@ -1,6 +1,6 @@
 """Demo schedule: one medicine per person due a few minutes from now, on the Pi's live store.
 
-    python tools/mock_schedule.py              # Dinu: Tylenol, Kathy: Vitamin D at now+5 min, rounded up to :x0/:x5
+    python tools/mock_schedule.py              # clear today's doses; Dinu: Tylenol, Kathy: Vitamin D at now+5 min, rounded up to :x0/:x5
     python tools/mock_schedule.py --restore    # put back the times saved before the last run
 
 The other medicines move to 20:00 so they're "not yet". The Pi must run the real schedule
@@ -48,6 +48,8 @@ def main():
     if not os.path.exists(BACKUP):          # keep the first (real) schedule, not a previous mock
         os.makedirs(os.path.dirname(BACKUP), exist_ok=True)
         json.dump({m["id"]: m["times"] for m in meds}, open(BACKUP, "w"), indent=1)
+    r = call("POST", f"{base}/doses/reset")              # today starts over: nothing taken yet
+    print(f"reset today's doses ({r.get('cleared', 0)} logged entries cleared)")
     at = demo_time()
     for m in meds:
         times = [at] if m["id"] in NOW_MEDS else [LATER]

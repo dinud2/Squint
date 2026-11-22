@@ -171,6 +171,14 @@ class Store:
             self._save()
         return {**d, "status": "flagged", "reason": reason}
 
+    def reset_day(self, now=None):
+        """Forget today's dose log (demo reset): every dose today is open again. -> entries removed."""
+        day = time.strftime("%Y-%m-%d", time.localtime(now or time.time()))
+        with self.lock:
+            n = len(self.d["log"].pop(day, {}))
+            self._save()
+        return n
+
     def mark(self, mid, pid, status="taken", reason=None, now=None):
         """Mark the earliest open dose of this med for this person. -> the Dose, or None."""
         now = now or time.time()

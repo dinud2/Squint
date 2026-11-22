@@ -239,6 +239,14 @@ def make_handler(hub, bottles=None, coord=None):
         def do_POST(self):
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            if coord is not None and u.path == "/doses/reset":     # demo: today starts over
+                n = coord.store.reset_day()
+                with coord.lock:
+                    coord.pending = None
+                coord.last_greet.clear()                    # greet the next arrival straight away
+                coord.took_this_visit.clear()
+                print(f"[reset] today's dose log cleared ({n} entries)", flush=True)
+                return self._json({"ok": True, "cleared": n})
             if coord is not None and u.path in ("/people", "/medications", "/doses/confirm", "/intake", "/tab5/send"):
                 b = self._jbody()
                 if b is None:
