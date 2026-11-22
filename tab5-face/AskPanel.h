@@ -162,9 +162,23 @@ class AskPanel {
     const bool yesPicked = phase == P::Yes || phase == P::AutoYes;
     const bool noPicked = phase == P::No;
     const bool counting = phase == P::Counting;
+    // Hand to mouth was seen and Yes ticked itself: one wide green banner, big check, "Taken!" -
+    // the moment the demo is about, so it has to be seen from across the room.
+    if (phase == P::AutoYes) {
+      const int x0 = kYesX - 10, w = kNoX + kBtnW + 10 - x0;
+      g.fillSmoothRoundRect(x0, kBtnY - 10, w, kBtnH + 20, kBtnR + 10, kGreen);
+      check(g, x0 + w / 2 - 150, kBtnY + kBtnH / 2);
+      g.setFont(&title_);
+      g.setTextSize(1);
+      g.setTextColor(0x0000, kGreen);
+      g.setTextDatum(textdatum_t::middle_left);
+      g.drawString("Taken!", x0 + w / 2 - 60, kBtnY + kBtnH / 2 + 4);
+      return;
+    }
     // Yes: green. Ticked: a black check instead of the word. Dim when No was picked.
-    button(g, kYesX, noPicked ? kGreenDim : kGreen, yesPicked ? nullptr : "Yes", noPicked ? kTextDim : 0x0000,
-           counting);
+    // Counting ("taken"): starts dark and fills up bright from the left (progress(), per frame).
+    button(g, kYesX, (noPicked || counting) ? kGreenDim : kGreen, yesPicked ? nullptr : "Yes",
+           noPicked ? kTextDim : (counting ? kWhite : 0x0000), counting);
     if (yesPicked) check(g, kYesX + kBtnW / 2, kBtnY + kBtnH / 2);
     // No: grey; white when picked, dim once Yes is (being) picked.
     const bool noDim = yesPicked || counting;
@@ -186,6 +200,26 @@ class AskPanel {
     g.setTextDatum(textdatum_t::middle_center);
     g.drawString(label, x + kBtnW / 2, y + kBtnH / 2 + 4);
   }
+
+  public:
+  // "taken" countdown: the Yes button fills with bright green from x px (of kBtnW) to x1 px.
+  // Clipped to that slice, so each frame only draws and sends the new part.
+  template <typename Out>
+  void progress(LGFX_Sprite& g, int from, int to, Out out) {
+    if (to <= from) return;
+    const Rect r{kYesX + from, kBtnY, kYesX + to - 1, kBtnY + kBtnH - 1};
+    g.setClipRect(r.x0, r.y0, r.x1 - r.x0 + 1, r.y1 - r.y0 + 1);
+    g.fillSmoothRoundRect(kYesX, kBtnY, kBtnW, kBtnH, kBtnR, kGreen);
+    g.setFont(&title_);
+    g.setTextSize(1);
+    g.setTextColor(0x0000, kGreen);
+    g.setTextDatum(textdatum_t::middle_center);
+    g.drawString("Yes", kYesX + kBtnW / 2, kBtnY + kBtnH / 2 + 4);
+    g.clearClipRect();
+    out(r);
+  }
+
+ private:
 
   static void check(LGFX_Sprite& g, int cx, int cy) {
     const float r = 13;

@@ -32,6 +32,11 @@ LOOSE = {
     "red":     [((0, 100, 60), (7, 255, 255)), ((165, 100, 60), (180, 255, 255))],
 }
 LOOSE_WHITE = {"advil": 0.18, "motrin": 0.10, "red": 0.03}
+# Orange patches with no white around them (Omega 3-6-9's capsules in a CLEAR bottle, between
+# hands and a dark shirt) are kept as "weak" candidates: checked after the others, and they can
+# only add a confident name, never a "not sure" (skin would otherwise stop the frame).
+WEAK = {"motrin"}
+WEAK_CANDIDATES = 2
 MIN_AREA = 0.0007      # of the frame (~370 px at 960x544): smaller is text on a lanyard
 MAX_AREA = 0.06        # bigger is clothing / a wall
 MIN_WHITE = {"advil": 0.18, "motrin": 0.18,   # share of the ring around the patch that is white
@@ -75,14 +80,17 @@ def find(frame, ignore_top=0, frame_area=None, loose=False):
             blob = (lab[y0:y1, x0:x1] == i)
             ring = ~blob
             wf = float(white[y0:y1, x0:x1][ring].mean()) if ring.any() else 0.0
+            weak = False
             if wf < min_white[name]:
-                continue
+                if not (loose and name in WEAK):
+                    continue
+                weak = True
             sat = float(hsv[y0:y1, x0:x1, 1][blob].mean())
             found.append({"name": name, "box": [int(x), int(y), int(x + bw), int(y + bh)],
-                          "area": int(area), "white": round(wf, 2), "sat": round(sat),
+                          "area": int(area), "white": round(wf, 2), "sat": round(sat), "weak": weak,
                           "score": float(area) * (0.5 + wf)})
     found.sort(key=lambda f: -f["score"])
-    return found
+    return found  # strong and weak mixed, best first (identify() takes the strong ones first)
 
 
 def bottle_crop(frame, box, grow=2.2):
@@ -132,14 +140,18 @@ def identify(frame, clf=None, ignore_top=0, frame_area=None):
     """-> (name, info), name in advil / motrin / omega369 / tylenol / vitamind, or None (nothing, or not sure:
     then info["unsure"] says why). Without a classifier: strict colours, red = Tylenol."""
     found = find(frame, ignore_top, frame_area, loose=clf is not None)
-    info = {"candidates": [(f["name"], f["area"], f["white"]) for f in found[:CANDIDATES]], "checks": []}
+    found = ([f for f in found if not f.get("weak")][:CANDIDATES]
+             + [f for f in found if f.get("weak")][:WEAK_CANDIDATES])
+    info = {"candidates": [(f["name"], f["area"], f["white"]) for f in found], "checks": []}
     unsure = None
-    for f in found[:CANDIDATES]:                 # best first; a vetoed patch lets the next one try
+    for f in found:                              # best first; a vetoed patch lets the next one try
         if clf is None:
             info["box"] = f["box"]
             return ("tylenol" if f["name"] == "red" else f["name"]), info
         p = clf(bottle_crop(frame, f["box"]))
         verdict, why = judge(f["name"], p)
+        if f.get("weak") and verdict == "unsure":
+            verdict, why = "_other", "weak patch: " + why   # only a confident name counts
         info["checks"].append({"colour": f["name"], "box": f["box"], "verdict": verdict, "why": why,
                                "p": {k: round(v, 2) for k, v in p.items()}})
         if f["name"] == "red":                   # kept for /bottles/last and the laptop view

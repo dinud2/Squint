@@ -10,7 +10,7 @@
 //   idle       round eyes that glance around and blink          white
 //   greet      ^^ smiling crescents, gentle bounce               white
 //   remind     one eye + a wink                                   white
-//   happy      hearts with a heartbeat                            white
+//   happy      one gold star in the middle, with a heartbeat      gold
 //   concerned  tall eye + half-closed eye                         amber
 //   stop       ring eyes                                          red
 //   wrong      lowered eyes glancing away                         amber
@@ -64,6 +64,8 @@ constexpr Rgb kAmber{0xEF, 0x9F, 0x27};
 constexpr Rgb kRed{0xE2, 0x4B, 0x4A};
 constexpr Rgb kSleepBlue{0x5A, 0x86, 0xC4};
 constexpr Rgb kGreen{0x4C, 0xC2, 0x6A};  // "Yes" (same as askpanel::kGreen)
+constexpr Rgb kGold{0xFF, 0xC4, 0x2E};   // the "well done" star
+constexpr float kStarR = 250.0f;         // its outer radius (the screen is 720 high)
 constexpr uint16_t kBackground = 0x0000;
 
 inline Rgb colorFor(Reaction r) {
@@ -106,17 +108,17 @@ class OttoFace {
     canvas_.setPsram(true);
     canvas_.setColorDepth(16);
     if (!canvas_.createSprite(kCanvasW, kCanvasH)) return false;
-    // Pre-render the hearts: anti-aliased circles are costly, copying a sprite is not.
-    for (int i = 0; i < kHeartSteps; ++i) {
-      const float sz = kEyeSize * 1.08f * (1 + 0.07f * i / (kHeartSteps - 1));
-      heartSize_[i] = sz;
-      const int w = (int)(sz * 1.12f) + 8;
-      hearts_[i].setPsram(true);
-      hearts_[i].setColorDepth(16);
-      if (!hearts_[i].createSprite(w, w)) return false;
-      hearts_[i].fillSprite(kBackground);
-      g_ = &hearts_[i];
-      heart(w / 2.0f, w / 2.0f, sz, color565(kWhite));
+    // Pre-render the star at each heartbeat size: its anti-aliased edges are costly, copying a
+    // sprite is not.
+    for (int i = 0; i < kStarSteps; ++i) {
+      const float R = kStarR * (1 + 0.08f * i / (kStarSteps - 1));
+      const int w = (int)(2 * R) + 12;
+      stars_[i].setPsram(true);
+      stars_[i].setColorDepth(16);
+      if (!stars_[i].createSprite(w, w)) return false;
+      stars_[i].fillSprite(kBackground);
+      g_ = &stars_[i];
+      star(w / 2.0f, w / 2.0f, R, color565(kGold));
       g_ = &canvas_;
     }
     if (!askPanel_.begin()) return false;
@@ -193,9 +195,8 @@ class OttoFace {
  private:
   M5Canvas canvas_{&M5.Display};
   M5Canvas* g_ = &canvas_;  // where the shape helpers draw
-  static constexpr int kHeartSteps = 8;
-  M5Canvas hearts_[kHeartSteps];  // the heart at each heartbeat size, drawn once at start
-  float heartSize_[kHeartSteps] = {};
+  static constexpr int kStarSteps = 8;
+  M5Canvas stars_[kStarSteps];  // the gold star at each heartbeat size, drawn once at start
   Reaction shown_ = Reaction::Sleep, prev_ = Reaction::Sleep;
   bool started_ = false;
   uint32_t changeMs_ = 0, nextUs_ = 0, lastUs_ = 0;
@@ -247,16 +248,16 @@ class OttoFace {
     (void)t0;
 #endif
   }
-  // "taken": a green bar fills under Yes over 2 s. It only grows, so each frame draws and
-  // sends just the new slice (the panel redraw at the tick clears it).
+  // "taken": the Yes button fills up bright green over 2 s. It only grows, so each frame draws
+  // and sends just the new slice (the panel redraw at the tick replaces it).
   void drawCountdown() {
     if (ask::state().phase != ask::Phase::Counting) return;
     const int want = (int)(askpanel::kBtnW * ask::countdown());
     if (want <= barShown_) return;
-    const float x0 = askpanel::kYesX + barShown_, x1 = askpanel::kYesX + want;
-    fillRectL(x0, askpanel::kBarY, x1 - x0 - 1, askpanel::kBarH - 1, color565(kGreen));
-    const Pt a = T(x0, askpanel::kBarY), b = T(x1, askpanel::kBarY + askpanel::kBarH);
-    push(Box{(int)std::min(a.x, b.x), (int)std::min(a.y, b.y), (int)std::max(a.x, b.x), (int)std::max(a.y, b.y)});
+    nPanelOut_ = 0;
+    landscape([&] { askPanel_.progress(canvas_, barShown_, want, [this](const askpanel::Rect& r) { panelOut(r); }); });
+    for (int i = 0; i < nPanelOut_; ++i) push(panelOut_[i]);
+    nPanelOut_ = 0;
     barShown_ = want;
   }
 
@@ -434,6 +435,23 @@ class OttoFace {
     line(lx + 1, ty, cx, by - 1, 3, c);  // soften the slanted edges
     line(rx - 1, ty, cx, by - 1, 3, c);
   }
+  // A five-pointed star, point up: ten triangles from the middle, edges softened like heart().
+  void star(float cx, float cy, float R, uint16_t c) {
+    const float ri = 0.48f * R;  // inner corners: a friendly, chubby star
+    mark(cx - R, cy - R, cx + R, cy + R);
+    float px[10], py[10];
+    for (int k = 0; k < 10; ++k) {
+      const float a = -kPi / 2 + k * kPi / 5, rr = (k % 2) ? ri : R;
+      px[k] = cx + rr * cosf(a);
+      py[k] = cy + rr * sinf(a);
+    }
+    const Pt o = T(cx, cy);
+    for (int k = 0; k < 10; ++k) {
+      const Pt a = T(px[k], py[k]), b = T(px[(k + 1) % 10], py[(k + 1) % 10]);
+      g_->fillTriangle(o.x, o.y, a.x, a.y, b.x, b.y, c);
+    }
+    for (int k = 0; k < 10; ++k) line(px[k], py[k], px[(k + 1) % 10], py[(k + 1) % 10], 3, c);
+  }
   void sparkle(float cx, float cy, float s, uint16_t c) {
     const float w = 0.16f * s;
     mark(cx - s, cy - s, cx + s, cy + s);
@@ -570,23 +588,19 @@ class OttoFace {
           stroke(rx, kEyeY + D * 0.28f, D * 0.42f * pop, 215, 325, 26 * kScale, c);
         break;
       }
-      case Reaction::Happy: {  // hearts with a heartbeat, floating up and down
+      case Reaction::Happy: {  // one gold star in the middle, with a heartbeat, floating up and down
         const float beat = powf(fabsf(sinf(t * kPi * 1.25f)), 6.0f);  // 0..1
-        const float kEyeY = face::kEyeY + bob(t, 16, 0.45f);
+        const float y = face::kEyeY + bob(t, 16, 0.45f), x = kWidth / 2.0f;
         if (open < 1) {  // popping in: draw live at any size (only for ~170 ms)
-          const float s = D * 1.08f * pop;
-          heart(lx, kEyeY, s, c);
-          heart(rx, kEyeY, s, c);
+          star(x, y, kStarR * pop, color565(kGold));
         } else {
-          M5Canvas& h = hearts_[std::min(kHeartSteps - 1, (int)(beat * kHeartSteps))];
+          M5Canvas& h = stars_[std::min(kStarSteps - 1, (int)(beat * kStarSteps))];
           const int w = h.width();
           const int ax = kFlip ? w / 2 : w - 1 - w / 2, ay = kFlip ? w - 1 - w / 2 : w / 2;  // T(w/2, w/2)
-          for (float x : {lx, rx}) {
-            const Pt P = T(x, kEyeY);
-            const int px = (int)lroundf(P.x) - ax, py = (int)lroundf(P.y) - ay;
-            h.pushSprite(&canvas_, px, py, kBackground);
-            markPhys(bucket(x), px, py, px + w, py + w);
-          }
+          const Pt P = T(x, y);
+          const int px = (int)lroundf(P.x) - ax, py = (int)lroundf(P.y) - ay;
+          h.pushSprite(&canvas_, px, py, kBackground);
+          markPhys(bucket(x), px, py, px + w, py + w);
         }
         break;
       }

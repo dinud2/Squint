@@ -24,7 +24,7 @@ from .api import Hub, serve
 from .bottle_service import BottleService
 from .camera import Camera
 from .coordinator import Coordinator
-from .faces import FaceID
+from .faces import COUNTER_FACE_PX, FaceID
 from .journal import Journal
 from .presence import Presence
 from .store import Store
@@ -80,8 +80,10 @@ def face_loop(src, hub, det_scale, verbose, coord=None):
             continue
         hub.diag.faces["enrolled"] = sorted(fid.people)
         hub.diag.face_frame(t, frame.shape, fid.last_raw, len(seen), seen)
-        names = [n for _, n, _, _ in seen if n != "unknown"]
-        unknown = sum(n == "unknown" for _, n, _, _ in seen)
+        # Only faces close enough to be AT the counter count; people in the background don't.
+        near = [x for x in seen if float(x[0][2]) >= COUNTER_FACE_PX]
+        names = [n for _, n, _, _ in near if n != "unknown"]
+        unknown = sum(n == "unknown" for _, n, _, _ in near)
         if verbose:
             print(f"[faces] {[(n, round(s, 2)) for _, n, s, _ in seen]} {1000 * (time.time() - t0):.0f} ms", flush=True)
         group = presence.update(t, names, unknown)
