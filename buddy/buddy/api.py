@@ -35,6 +35,7 @@ from urllib.parse import parse_qs, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .diag import Diag
+from .coordinator import AT_COUNTER_S
 from .insights import insights
 
 
@@ -137,9 +138,11 @@ def make_handler(hub, bottles=None, coord=None):
                 return self._json(insights(coord.store, coord.journal, days))
             if coord is not None and u.path == "/doses/pending":   # what "Did you take it?" is about
                 p = coord.pending
+                here = coord.last_group if time.time() - coord.last_group_t < AT_COUNTER_S else []
                 return self._json({"pending": None if not p else {"med": p["med"], "for": p["for"],
                                                                  "name": coord.store.med(p["med"])["name"]
-                                                                 if coord.store.med(p["med"]) else p["med"]}})
+                                                                 if coord.store.med(p["med"]) else p["med"]},
+                                   "present": list(coord.present), "at_counter": list(coord.present) or list(here)})
             if coord is not None and u.path in ("/people", "/medications", "/today", "/tab5/commands"):
                 st = coord.store
                 if u.path == "/people":

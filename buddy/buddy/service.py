@@ -11,8 +11,14 @@ Camera layout (medicine-buddy design):
 API on port 8081: see buddy/api.py.
 """
 import argparse
+import os
 import threading
 import time
+
+# Dose times are local (Toronto) and the Pi's clock is UTC. Set it here so the service is right
+# however it is started (squint_start.sh sets the same; SQUINT_TZ or TZ overrides).
+os.environ.setdefault("TZ", os.environ.get("SQUINT_TZ", "EST5EDT,M3.2.0,M11.1.0"))
+time.tzset()
 
 from .api import Hub, serve
 from .bottle_service import BottleService
