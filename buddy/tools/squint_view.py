@@ -125,6 +125,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pi", default="172.20.10.9")
     ap.add_argument("--fullscreen", action="store_true")
+    ap.add_argument("--stream", help="default: the Pi's small preview (480x272, 5 fps). "
+                    "http://<pi>:8080/stream for the full camera (heavier on the Pi and Wi-Fi)")
     a = ap.parse_args()
     pi = Pi(a.pi)
     cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
@@ -136,8 +138,10 @@ def main():
     while True:
         try:
             if cam is None:
-                cam = Camera(f"http://{a.pi}:8080/stream")
+                cam = Camera(a.stream or f"http://{a.pi}:8081/preview.mjpg")
             _, frame = cam.read()
+            if frame.shape[1] < 960:             # the small preview: enlarge so the labels stay sharp
+                frame = cv2.resize(frame, (960, 544), interpolation=cv2.INTER_LINEAR)
             frame = draw(frame.copy(), pi)
         except Exception as e:           # Pi rebooting / hotspot drop: keep the window, retry
             frame = np.zeros((544, 960, 3), np.uint8)

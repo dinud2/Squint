@@ -70,6 +70,7 @@ def face_loop(src, hub, det_scale, verbose, coord=None):
     while True:
         t, frame = cam.read()
         hub.last_frame_t = t
+        hub.set_preview(t, frame)
         t0 = time.time()
         try:
             seen = fid.identify_all(frame)

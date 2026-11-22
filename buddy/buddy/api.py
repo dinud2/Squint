@@ -48,6 +48,21 @@ class Hub:
         self.listeners = []          # in-process callbacks (the coordinator)
         self.last_frame_t = 0.0
         self.diag = Diag()           # what each part last did (GET /health)
+        self.preview, self.preview_t = None, 0.0   # small JPEG for the laptop view (GET /preview.mjpg)
+
+    PREVIEW_W, PREVIEW_H, PREVIEW_Q, PREVIEW_FPS = 480, 272, 60, 5
+
+    def set_preview(self, t, frame):
+        """Keep a small, low-quality copy of a frame the loops already decoded: the laptop's
+        debug view then costs the Pi ~2 ms 5x a second and ~50 KB/s of Wi-Fi, instead of the
+        full 960x544 stream at 20 fps (~1 MB/s)."""
+        if t - self.preview_t < 1.0 / self.PREVIEW_FPS:
+            return
+        import cv2
+        ok, jpg = cv2.imencode(".jpg", cv2.resize(frame, (self.PREVIEW_W, self.PREVIEW_H), interpolation=cv2.INTER_AREA),
+                               [cv2.IMWRITE_JPEG_QUALITY, self.PREVIEW_Q])
+        if ok:
+            self.preview, self.preview_t = jpg.tobytes(), t
 
     def publish(self, event):
         event = {**event, "time": time.time()}
@@ -154,6 +169,30 @@ def make_handler(hub, bottles=None, coord=None):
                 hub.diag.polled(self.client_address[0], self.headers.get("User-Agent"))
                 seq, lines = coord.tab5.after(int(q.get("after", 0)), float(q.get("wait", 0)))
                 return self._json({"seq": seq, "lines": lines})
+            if u.path == "/preview.jpg":            # the laptop view: small and cheap (see Hub.set_preview)
+                if hub.preview is None:
+                    return self._json({"error": "no frame yet"}, 503)
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(hub.preview)))
+                self.end_headers()
+                self.wfile.write(hub.preview)
+                return
+            if u.path == "/preview.mjpg":
+                self.send_response(200)
+                self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                self.end_headers()
+                sent = 0.0
+                try:
+                    while True:
+                        if hub.preview is not None and hub.preview_t != sent:
+                            jpg, sent = hub.preview, hub.preview_t
+                            self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                                             + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+                            self.wfile.flush()
+                        time.sleep(0.05)
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    return
             if u.path == "/cams":                   # both camera streams side by side
                 body = CAMS_PAGE.encode()
                 self.send_response(200)
