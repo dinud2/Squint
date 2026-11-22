@@ -9,8 +9,8 @@ Two stages, so colour stays the main cue but nothing else in the room is named:
      lanyards get through too.
   2. classifier (identify / judge): on a tight crop around the patch (bottle_crop), trained on
      such crops with the background replaced (tools/train_label_classifier.py). A bottle is named
-     only if colour and classifier AGREE (blue -> Advil, orange -> Motrin, red -> the classifier
-     picks Tylenol or Vitamin D). Classifier says "not a bottle" -> next patch; it sees a medicine
+     only if colour and classifier AGREE (blue -> Advil; orange -> Motrin or Omega 3-6-9, red ->
+     Tylenol or Vitamin D: the classifier picks, clearly, or it is "not sure"). Classifier says "not a bottle" -> next patch; it sees a medicine
      of ANOTHER colour, or Tylenol vs Vitamin D is close -> "not sure" (never a guess).
 
 frame (BGR) -> list of {"name", "box": [x0, y0, x1, y1], "area", "white", "score"} best first.
@@ -96,15 +96,16 @@ def bottle_crop(frame, box, grow=2.2):
     return frame[b:d, a:c]
 
 
-FAMILY = {"advil": ("advil",), "motrin": ("motrin",), "red": ("tylenol", "vitamind")}
-MEDS = ("advil", "motrin", "tylenol", "vitamind")
+# orange: Motrin's label, or the amber capsules of Omega 3-6-9 (a bottle not in the app)
+FAMILY = {"advil": ("advil",), "motrin": ("motrin", "omega369"), "red": ("tylenol", "vitamind")}
+MEDS = ("advil", "motrin", "omega369", "tylenol", "vitamind")
 CANDIDATES = 3         # patches checked per frame, biggest / whitest first
 # Tuned on whole held-out recording sessions (tools/train_label_classifier.py): 0 wrong bottles in
 # 339 photos, 1 of 205 no-medicine photos named; the rest of the misses are "not sure" / nothing.
 VETO = 0.50            # classifier "_other" >= this: not a medicine bottle, try the next patch
 MIN_P = 0.70           # the classifier must agree with the colour this strongly to name a bottle
 RIVAL = 0.35           # its top medicine is of ANOTHER colour at >= this: not sure (stops the frame)
-RED_MARGIN = 0.20      # Tylenol vs Vitamin D must differ by this much, else not sure
+RED_MARGIN = 0.20      # two bottles of one colour (Tylenol / Vitamin D, Motrin / Omega) must differ by this
 
 
 def judge(colour, p):
@@ -128,7 +129,7 @@ def judge(colour, p):
 
 
 def identify(frame, clf=None, ignore_top=0, frame_area=None):
-    """-> (name, info), name in advil / motrin / tylenol / vitamind, or None (nothing, or not sure:
+    """-> (name, info), name in advil / motrin / omega369 / tylenol / vitamind, or None (nothing, or not sure:
     then info["unsure"] says why). Without a classifier: strict colours, red = Tylenol."""
     found = find(frame, ignore_top, frame_area, loose=clf is not None)
     info = {"candidates": [(f["name"], f["area"], f["white"]) for f in found[:CANDIDATES]], "checks": []}

@@ -25,7 +25,7 @@ from buddy.bottle_service import CENTER  # noqa: E402
 from buddy.camera import Camera  # noqa: E402
 
 GREEN, AMBER, RED, WHITE, GREY = (90, 200, 90), (39, 170, 245), (70, 70, 230), (245, 245, 245), (170, 170, 170)
-NAMES = {"motrin": "Motrin", "tylenol": "Tylenol", "advil": "Advil", "vitamind": "Vitamin D"}
+NAMES = {"motrin": "Motrin", "tylenol": "Tylenol", "advil": "Advil", "vitamind": "Vitamin D", "omega369": "Omega 3-6-9 (not in the app)"}
 WIN = "Squint camera"
 
 
@@ -126,6 +126,8 @@ def draw(frame, pi):
     elif d.get("pending"):
         top, col = f"{d['pending']['for'].title()}: did you take your {d['pending']['name']}?", AMBER
     else:
+        if d.get("unknown") and not d.get("present"):
+            here = ["someone I don't know"]
         top, col = ("At the counter: " + ", ".join(here)) if here else "Nobody at the counter", WHITE
     cv2.rectangle(frame, (0, 0), (w, 40), (25, 25, 25), -1)
     cv2.putText(frame, top, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.75, col, 2, cv2.LINE_AA)

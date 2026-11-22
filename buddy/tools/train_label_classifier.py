@@ -4,7 +4,7 @@
     python tools/train_label_classifier.py --data <buddy/data> --all      # train on everything, write models/
 
 What it learns: the tight crop around a colour patch, exactly as the Pi cuts it
-(colors.find(loose=True) + colors.bottle_crop), -> _other / advil / motrin / tylenol / vitamind.
+(colors.find(loose=True) + colors.bottle_crop), -> _other / advil / motrin / omega369 / tylenol / vitamind.
 Colour stays the main cue: the Pi only lets the classifier veto a patch, split red into Tylenol vs
 Vitamin D, or say "not sure" when it sees a medicine of another colour (colors.judge).
 
@@ -43,9 +43,11 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 from buddy import colors  # noqa: E402
 
-CLASSES = ["_other", "advil", "motrin", "tylenol", "vitamind"]
-FAM = {"advil": "advil", "motrin": "motrin", "tylenol": "red", "vitamind": "red"}
-AS_OTHER = {"omega369", "_other", "_empty"}       # folders of photos with no (supported) medicine
+# omega369 is a bottle nobody takes here: the Pi must know it to say "not registered in the app"
+# (its amber capsules look orange, like Motrin, so it is in the orange family)
+CLASSES = ["_other", "advil", "motrin", "omega369", "tylenol", "vitamind"]
+FAM = {"advil": "advil", "motrin": "motrin", "omega369": "motrin", "tylenol": "red", "vitamind": "red"}
+AS_OTHER = {"_other", "_empty"}                  # folders of photos with no medicine
 SIZE = 224
 MEAN, STD = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 PI_FRAME = 960 * 544

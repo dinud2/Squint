@@ -21,7 +21,11 @@ GALLERY_DIR = os.path.join(HERE, "data", "faces")
 MIN_FACE_PX = 60        # smaller faces are too far away (or background people)
 DET_SCORE = 0.8
 # SFace cosine similarity: the model authors' same-person threshold is 0.363.
-ACCEPT = 0.40           # best person must score at least this...
+# 0.40 let a similar-looking visitor through as Dinu (2026-11-21). Measured live on the Pi: the
+# visitor scored up to 0.50 against Dinu two frames in a row, 0.55 only in single frames; Dinu
+# himself 0.70 median, Kathy 0.54 against her own photos. Unknown is the safe answer.
+ACCEPT = float(os.environ.get("SQUINT_FACE_ACCEPT", "0.50"))   # best person must score at least this...
+PERSON_ACCEPT = {"dinu": 0.55}   # stricter for someone a visitor resembles (SQUINT_FACE_ACCEPT_<ID> overrides)
 MARGIN = 0.08           # ...and beat the other person by this much
 TOP_K = 5               # score = mean of the 5 best matches against that person's photos
 
@@ -61,6 +65,10 @@ class FaceID:
         """-> YuNet rows of every big-enough face, largest first (closest to the counter)."""
         return sorted(self._detect(frame), key=lambda f: -f[2] * f[3])[:max_faces]
 
+    @staticmethod
+    def accept(name):
+        return float(os.environ.get(f"SQUINT_FACE_ACCEPT_{name.upper()}", PERSON_ACCEPT.get(name, ACCEPT)))
+
     def identify_all(self, frame):
         """Name every face at the counter. -> list of (face_row, name, score, scores), largest first.
 
@@ -73,15 +81,16 @@ class FaceID:
             sc = self.scores(self.embed(self.align(frame, f)))
             for name, s in sc.items():
                 others = [v for n, v in sc.items() if n != name]
-                if s >= ACCEPT and s - (max(others) if others else -1.0) >= MARGIN:
+                acc = self.accept(name)
+                if s >= acc and s - (max(others) if others else -1.0) >= MARGIN:
                     cands.append((s, i, name))
-                elif s >= ACCEPT and others and s >= max(others):
+                elif s >= acc and others and s >= max(others):
                     cands.append((s - 1.0, i, name))       # ambiguous: only if nothing better
             faces[i] = (f, sc)
         out = [[f, "unknown", max(sc.values()) if sc else 0.0, sc] for f, sc in faces]
         used_face, used_name = set(), set()
         for s, i, name in sorted(cands, reverse=True):
-            if i in used_face or name in used_name or s < ACCEPT:
+            if i in used_face or name in used_name or s < self.accept(name):
                 continue
             out[i][1], out[i][2] = name, s
             used_face.add(i); used_name.add(name)
@@ -118,7 +127,7 @@ class FaceID:
         ranked = sorted(sc.items(), key=lambda kv: -kv[1])
         best, bs = ranked[0]
         second = ranked[1][1] if len(ranked) > 1 else -1.0
-        if bs < ACCEPT or bs - second < MARGIN:
+        if bs < self.accept(best) or bs - second < MARGIN:
             return "unknown", bs, sc
         return best, bs, sc
 

@@ -32,6 +32,9 @@ AUTO_DELAY_S = 2.0
 # One camera: people are recognised walking up, then show the bottle at chest height with their
 # face out of view. The last group recognised stays "at the counter" this long for bottles.
 AT_COUNTER_S = 120
+# Bottles the camera knows but the app may not list (bottle id -> how to say it).
+KNOWN_BOTTLES = {"omega369": "Omega 3-6-9", "advil": "Advil", "motrin": "Motrin", "tylenol": "Tylenol",
+                 "vitamind": "Vitamin D"}
 GREET_COOLDOWN_S = 120    # people step in and out at a counter: say hello at most once per 2 min
 
 
@@ -72,6 +75,7 @@ class Coordinator:
         self.announce_url = announce_url        # e.g. http://<laptop>:8765/announce (home/server.py)
         self.tab5 = Tab5Queue()
         self.present = []
+        self.unknown_here = False               # a face nobody enrolled is in view now
         self.last_group, self.last_group_t = [], 0.0   # who was last recognised walking up, and when
         self.pending = None                     # {"med", "for", "t"} waiting for "did you take it?"
         self.last_greet = {}                    # person -> time of the last spoken greeting
@@ -118,7 +122,7 @@ class Coordinator:
         try:
             t = ev.get("type")
             if t == "people_present":
-                self.on_people(ev["people"])
+                self.on_people(ev["people"], ev.get("unknown", 0))
             elif t in ("bottle_picked", "bottle_shown"):
                 self.on_bottle(ev["bottle"])
             elif t == "intake":
@@ -134,7 +138,7 @@ class Coordinator:
                 names.append(m["name"])
         return names
 
-    def on_people(self, people):
+    def on_people(self, people, unknown=0):
         now = time.time()
         with self.lock:
             arrived = [p for p in people if p not in self.present]
@@ -143,7 +147,10 @@ class Coordinator:
                 self.last_group_t = now
             if people:                         # a new face replaces whoever was here before
                 self.last_group, self.last_group_t = list(people), now
+            elif unknown:                      # ...and so does a stranger: never credit the last person
+                self.last_group = []
             self.present = list(people)
+            self.unknown_here = bool(unknown)
         for pid in arrived:
             self.arrived_at[pid] = now
             self.due_at_arrival[pid] = [] if self.demo else self.due_now(pid)
@@ -156,7 +163,7 @@ class Coordinator:
             if due and pid not in self.took_this_visit and stayed >= 5:
                 self.log("visit_no_dose", pid, due=due)
         if not people:
-            self.show("away")
+            self.show("away")                  # a stranger is not greeted: the Tab5 just rests
             return
         if not arrived:
             return
@@ -193,11 +200,21 @@ class Coordinator:
 
     def on_bottle(self, bottle):
         m = self.store.med(bottle)
-        if m is None:
+        if m is None:                           # a bottle we recognise, but nobody takes it here
+            name = KNOWN_BOTTLES.get(bottle, bottle.capitalize())
+            self.log("bottle_not_registered", list(self.present), med=bottle)
+            self.show(f"concerned Not registered|{name} isn't in the app")
+            self.say(f"That's {name}. That medication isn't registered in the app.")
             return
         owner, oname, mname = m["for"], self.store.name(m["for"]), m["name"]
         now = time.time()
         present = list(self.present) or (list(self.last_group) if now - self.last_group_t < AT_COUNTER_S else [])
+        if not present and self.unknown_here:
+            # Someone not enrolled holds it: say so, never guess whose turn it is.
+            self.log("bottle_unknown_person", [], med=bottle)
+            self.show(f"concerned Who's there?|I don't know you")
+            self.say(f"I don't recognise you, so I can't check whose {mname} this is.")
+            return
         if not present:
             # Nobody recognised: don't guess whose dose it is (it used to go to the bottle's owner).
             self.log("bottle_no_face", [], med=bottle)

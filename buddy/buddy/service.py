@@ -86,7 +86,7 @@ def face_loop(src, hub, det_scale, verbose, coord=None):
             print(f"[faces] {[(n, round(s, 2)) for _, n, s, _ in seen]} {1000 * (time.time() - t0):.0f} ms", flush=True)
         group = presence.update(t, names, unknown)
         if group is not None:
-            hub.publish({"type": "people_present", "people": group, "unknown": unknown})
+            hub.publish({"type": "people_present", "people": group, "unknown": int(presence.unknown_here)})
         # hand to mouth, only while a dose is waiting for "Did you take it?"
         if h2m is not None and coord is not None and coord.pending:
             try:

@@ -40,6 +40,7 @@ class Diag:
                 f["last_face_t"] = t
                 names = [n for _, n, _, _ in seen if n != "unknown"]
                 f["last_unknown"] = sum(n == "unknown" for _, n, _, _ in seen)
+                f["last_scores"] = [{k: round(v, 3) for k, v in sc.items()} for _, _, _, sc in seen]
                 if names:
                     f["last_names"], f["last_named_t"] = names, t
                 x, y, bw, bh = (float(v) for v in seen[0][0][:4])

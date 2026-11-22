@@ -157,7 +157,8 @@ def make_handler(hub, bottles=None, coord=None):
                 return self._json({"pending": None if not p else {"med": p["med"], "for": p["for"],
                                                                  "name": coord.store.med(p["med"])["name"]
                                                                  if coord.store.med(p["med"]) else p["med"]},
-                                   "present": list(coord.present), "at_counter": list(coord.present) or list(here)})
+                                   "present": list(coord.present), "at_counter": list(coord.present) or list(here),
+                                   "unknown": coord.unknown_here})
             if coord is not None and u.path in ("/people", "/medications", "/today", "/tab5/commands"):
                 st = coord.store
                 if u.path == "/people":
