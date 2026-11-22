@@ -293,7 +293,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				DEVELOPMENT_TEAM = KTXJSM6D56;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hackwestern.squint;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -322,7 +321,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				DEVELOPMENT_TEAM = KTXJSM6D56;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hackwestern.squint;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -345,7 +343,6 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				DEVELOPMENT_TEAM = KTXJSM6D56;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hackwestern.squint.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -369,7 +366,6 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				DEVELOPMENT_TEAM = KTXJSM6D56;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hackwestern.squint.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
