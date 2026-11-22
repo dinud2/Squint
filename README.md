@@ -8,6 +8,9 @@ tells their family when something needs attention.
 We built it at Hack Western 13 for older couples who keep their medicine together, and for the
 son or daughter who worries about them from an hour away.
 
+**Try the family app in your browser:** https://appetize.io/app/b_yzatlsilxxj7evpjwh3tvedppy
+(it opens with sample data, no hardware needed).
+
 ## Why
 
 About one Canadian senior in every two hundred is hospitalized each year because of a reaction
@@ -108,7 +111,7 @@ You need the Pi with QNX and the webcam, the Tab5, a laptop, and an iPhone, all 
 A phone hotspot works.
 
 ```bash
-git clone https://github.com/dinud2/hackwestern.git && cd hackwestern
+git clone https://github.com/dinud2/Squint.git && cd Squint
 
 # laptop: the voice
 cd home && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && ./get_voices.sh
