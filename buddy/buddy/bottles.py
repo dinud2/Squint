@@ -49,15 +49,15 @@ class Classifier:
     def available(cls):
         return os.path.exists(cls.MODEL) and os.path.exists(cls.META)
 
-    def __init__(self):
+    def __init__(self, model=None, meta=None):
         import json
-        with open(self.META) as f:
+        with open(meta or self.META) as f:
             meta = json.load(f)
         self.classes = meta["classes"]
         self.size = int(meta.get("size", 224))
         self.mean = np.array(meta.get("mean", MEAN), np.float32)
         self.std = np.array(meta.get("std", STD), np.float32)
-        self.net = cv2.dnn.readNet(self.MODEL)
+        self.net = cv2.dnn.readNet(model or self.MODEL)
 
     def __call__(self, crop_bgr):
         img = cv2.resize(crop_bgr, (self.size, self.size), interpolation=cv2.INTER_AREA)[:, :, ::-1]

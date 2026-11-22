@@ -31,7 +31,8 @@ python3 -m buddy.service --bottle-source http://localhost:8080/stream \
 |---|---|---|
 | `--bottle-source` | `http://localhost:8080/stream` | MJPEG stream the bottles are recognised in |
 | `--face-source` | off | MJPEG stream the faces are recognised in. On the Pi both are the same C270 stream |
-| `--bottle-mode` | `show` | `show`: the bottle is held up to the camera; `counter`: it is picked up off the counter |
+| `--bottle-mode` | `color` | `color`: the bottle anywhere in view, by label colour + the label classifier; `show`: held up in the centre box; `counter`: picked up off the counter |
+| `--demo` | off (on in `squint_start.sh`) | only check whose medicine it is: own → "Yes Dinu, that's your Tylenol", someone else's → warning. No dose times, "not yet", "already taken" or dose log |
 | `--announce` | off | the voice service (`home/server.py`); without it, Squint stays silent |
 | `--bottle-fps` / `--det-scale` | 4 / 0.5 | lower these if the Pi can't keep up |
 | `--verbose` | | print every frame's result |
@@ -90,6 +91,23 @@ To watch every frame's decision, start the service with `--verbose` (on the Pi:
 `SQUINT_ARGS="--verbose --announce ..." ./squint_start.sh`, then `tail -f ~/buddy/service.log`).
 Greetings are spoken at most once per person every 2 minutes, so a quick second walk-up only wakes
 the face.
+
+## Bottle recognition (colour + label classifier)
+
+`buddy/colors.py`: blue label = Advil, orange = Motrin, red = Tylenol or Vitamin D. Loose colour
+ranges find candidate label patches anywhere in the frame; a classifier on a tight crop around each
+patch may only veto it (not a bottle), split red into Tylenol / Vitamin D, or say "not sure" when
+it sees a medicine of another colour. It never overrules the colour with a guess.
+
+```bash
+# record varied full frames: one session per person / room / light / distance (laptop, Pi on the hotspot)
+python tools/capture_frames.py advil  --tag kathy-kitchen-dim --out <data>/frames
+python tools/capture_frames.py _other --tag red-shirt         --out <data>/frames
+# honest check: whole sessions held out + real Pi frames (a folder with truth.json), wrong vs not sure
+python tools/train_label_classifier.py --data <data> --real <dir with truth.json>
+# then train on everything and write models/bottle_classifier.onnx + bottle_classes.json
+python tools/train_label_classifier.py --data <data> --all
+```
 
 ## Enrol people and bottles
 

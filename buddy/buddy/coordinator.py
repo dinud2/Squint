@@ -14,6 +14,12 @@ Flow (medicine-buddy design):
   high-risk, taken today -> Tab5 `stop`; Nest: "Stop, you already took ... at 8:02"
   unknown bottle         -> ignored here (bottle_service never names it)
   everybody leaves       -> Tab5 `away`
+
+Demo mode (Coordinator(demo=True), `python3 -m buddy.service --demo`): no clock at all. Arrivals
+get "Hi Dinu"; a bottle is only checked against who is at the counter: their own -> Tab5
+`happy That's yours|Tylenol` + "Yes Dinu, that's your Tylenol."; someone else's -> the `wrong`
+warning; nobody recognised -> `concerned Who's there?`. No dose windows, no "not yet", no
+"already taken", no "all done", no Did-you-take-it timers, and nothing is written to the dose log.
 """
 import json
 import threading
@@ -59,8 +65,9 @@ class Tab5Queue:
 
 
 class Coordinator:
-    def __init__(self, hub, store, announce_url=None, journal=None):
+    def __init__(self, hub, store, announce_url=None, journal=None, demo=False):
         self.hub, self.store = hub, store
+        self.demo = demo                        # True: only "own medicine or someone else's?"
         self.journal = journal                  # routine tracking (journal.py); None = don't log
         self.announce_url = announce_url        # e.g. http://<laptop>:8765/announce (home/server.py)
         self.tab5 = Tab5Queue()
@@ -139,7 +146,7 @@ class Coordinator:
             self.present = list(people)
         for pid in arrived:
             self.arrived_at[pid] = now
-            self.due_at_arrival[pid] = self.due_now(pid)
+            self.due_at_arrival[pid] = [] if self.demo else self.due_now(pid)
             self.took_this_visit.discard(pid)
             self.log("arrive", pid)
         for pid in left:
@@ -162,6 +169,10 @@ class Coordinator:
         if not to_greet:
             return
         arrived = to_greet
+        if self.demo:                           # no schedule: just hello
+            self.say("Hi " + join_names([self.store.name(p) for p in arrived]) + ".")
+            self.show(f"greet {first}")
+            return
         parts = []
         for pid in arrived:
             name, meds = self.store.name(pid), self.med_list(pid)
@@ -198,6 +209,11 @@ class Coordinator:
             who = join_names([self.store.name(p) for p in present])
             self.show(f"wrong {oname}'s pills|That's {oname}'s {mname}")
             self.say(f"Careful {who}, that's {oname}'s {mname}.")
+            return
+        if self.demo:                           # their own medicine: that's all the demo checks
+            self.log("right_bottle", owner, med=bottle)
+            self.show(f"happy That's yours|{mname}")
+            self.say(f"Yes {oname}, that's your {mname}.")
             return
         taken = self.store.taken_today(bottle, owner)
         open_this = [d for d in self.store.open_doses(owner) if d["med"] == bottle]

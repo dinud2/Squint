@@ -138,13 +138,12 @@ class BottleService:
         with self.lock:
             if self.mode == "color":
                 # Anywhere in the picture, by label colour (colors.py): blue = Advil, orange =
-                # Motrin, red = Tylenol or Vitamin D (the classifier picks, on a crop around it).
+                # Motrin, red = Tylenol or Vitamin D; the classifier checks a tight crop around
+                # the patch (veto "not a bottle", red: which one, "not sure" if it disagrees).
                 name, info = colors.identify(img, self.clf)
                 box = info.get("box") or [0, 0, 0, 0]
-                score = 0.9 if name else 0.0
-                if name and "red" in info:
-                    score = max(info["red"]["tylenol"], info["red"]["vitamind"])
-                sc = {name: score} if name else {"nothing": 1.0}
+                score = float(info.get("p", {}).get(name, 0.9)) if name else 0.0
+                sc = {name: score} if name else {("not sure" if info.get("unsure") else "nothing"): 1.0}
                 name = name or "unknown"
                 out = [{"name": name, "score": round(score, 3), "box": box}]
                 events = self.show.update(time.time(), name, score)
@@ -153,7 +152,9 @@ class BottleService:
                 on_counter = []
                 self.last = {"name": name, "score": round(score, 3), "t": time.time(), "shown": self.show.shown,
                              "scores": {k: round(v, 3) for k, v in sc.items()}, "box": box,
-                             "candidates": info.get("candidates"), "red": info.get("red")}
+                             "candidates": info.get("candidates"), "red": info.get("red"),
+                             "unsure": info.get("unsure"), "unsure_box": info.get("unsure_box"),
+                             "checks": info.get("checks")}
             elif self.mode == "show":
                 c, box = center_crop(img)
                 if self.clf is not None:

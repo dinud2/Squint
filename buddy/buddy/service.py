@@ -132,6 +132,8 @@ def main():
     ap.add_argument("--face-source", default="", help="camera looking at the person ('' = off)")
     ap.add_argument("--port", type=int, default=8081)
     ap.add_argument("--det-scale", type=float, default=0.5, help="detect faces on a smaller frame (faster)")
+    ap.add_argument("--demo", action="store_true",
+                    help="demo: only check whose medicine it is (no dose times, no 'already taken')")
     ap.add_argument("--verbose", action="store_true", help="print every frame's result")
     ap.add_argument("--announce", default=None,
                     help="Nest voice endpoint, e.g. http://<laptop>:8765/announce (home/server.py)")
@@ -140,7 +142,9 @@ def main():
     hub = Hub()
     bottles = BottleService(hub, a.bottle_mode)
     hub.diag.voice["url"] = a.announce
-    coord = Coordinator(hub, Store(), a.announce, journal=Journal())
+    coord = Coordinator(hub, Store(), a.announce, journal=Journal(), demo=a.demo)
+    if a.demo:
+        print("[buddy] DEMO mode: own medicine or someone else's, no dose timing", flush=True)
     serve(hub, a.port, bottles, coord)
     print(f"[buddy] API on :{a.port}", flush=True)
     loops = []

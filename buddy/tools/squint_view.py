@@ -105,6 +105,12 @@ def draw(frame, pi):
             x0, y0, x1, y1 = int(x0 * sx) - 12, int(y0 * sy) - 12, int(x1 * sx) + 12, int(y1 * sy) + 12
             cv2.rectangle(frame, (x0, y0), (x1, y1), GREEN, 3)
             label(frame, NAMES.get(b["name"], b["name"]), (x0, max(60, y0 - 8)), GREEN, 0.8)
+        elif b.get("unsure") and b.get("unsure_box") and b.get("age_s", 9) < 2:   # colour vs classifier disagree
+            sx, sy = w / 960, h / 544
+            x0, y0, x1, y1 = b["unsure_box"]
+            x0, y0, x1, y1 = int(x0 * sx) - 12, int(y0 * sy) - 12, int(x1 * sx) + 12, int(y1 * sy) + 12
+            cv2.rectangle(frame, (x0, y0), (x1, y1), AMBER, 2)
+            label(frame, "not sure", (x0, max(60, y0 - 8)), AMBER, 0.7)
     else:                                # show mode: the fixed box in the middle
         x0, y0, x1, y1 = int(CENTER[0] * w), int(CENTER[1] * h), int(CENTER[2] * w), int(CENTER[3] * h)
         cv2.rectangle(frame, (x0, y0), (x1, y1), GREEN if named else GREY, 3 if named else 1)

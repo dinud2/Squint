@@ -4,6 +4,8 @@
 #   :8080  Logitech C270 (camera unit 5) at the person: faces, and bottles held up to it
 #   :8081  buddy.service (API, coordinator); /cams shows the camera
 # Optional: SQUINT_ARGS="--announce http://<laptop>:8765/announce" ./squint_start.sh
+# Demo mode is on by default (only "own medicine or someone else's?", no dose times);
+# SQUINT_DEMO= ./squint_start.sh  runs the real dose schedule instead.
 H=/data/home/qnxuser
 for p in $(pidin -F "%a %N" | awk '$2=="camstream" || $2=="python3" {print $1}'); do kill $p; done
 sleep 2
@@ -22,5 +24,6 @@ sleep 3
 # Dose times are local (Toronto); the Pi clock is UTC, so give the service the time zone.
 export TZ="${SQUINT_TZ:-EST5EDT,M3.2.0,M11.1.0}"
 cd $H/buddy && (nohup python3 -u -m buddy.service --bottle-source http://localhost:8080/stream \
-    --face-source http://localhost:8080/stream $SQUINT_ARGS > service.log 2>&1 &)
+    --face-source http://localhost:8080/stream ${SQUINT_DEMO---demo} $SQUINT_ARGS > service.log 2>&1 &)
+echo "demo mode: ${SQUINT_DEMO---demo}"
 echo "started: C270 :8080 (faces + bottles), service :8081 (/cams); logs in ~/stream and ~/buddy"
