@@ -25,8 +25,8 @@ SEED = {
          "notes": "1 caplet", "risk": "normal"},
         {"id": "metformin", "name": "Metformin", "strength": "500 mg", "for": "dinu", "times": ["08:00"],
          "notes": "with food", "risk": "high"},
-        {"id": "omega369", "name": "Omega 3-6-9", "strength": "1200 mg", "for": "kathy", "times": ["08:00"],
-         "notes": "1 softgel", "risk": "normal"},
+        {"id": "advil", "name": "Advil", "strength": "200 mg", "for": "kathy", "times": ["08:00"],
+         "notes": "1 tablet", "risk": "normal"},
     ],
     "log": {},            # "YYYY-MM-DD" -> {"med|person|HH:mm": {"status", "at", "reason"}}
 }
