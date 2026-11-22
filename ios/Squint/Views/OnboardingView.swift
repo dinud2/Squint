@@ -81,7 +81,9 @@ struct PeopleStep: View {
         .paperBackground()
         .navigationTitle("Your parents")
         .toolbar {
-            Button("Next", action: next).disabled(store.elders.isEmpty)
+            // People come from the station. If it can't be reached yet, Skip goes on to the
+            // station address instead of trapping you here.
+            Button(store.elders.isEmpty ? "Skip" : "Next", action: next)
         }
         .onChange(of: photoItem) { _, item in
             Task { photo = try? await item?.loadTransferable(type: Data.self) }
