@@ -135,7 +135,7 @@ def patches(o):
     if o["label"] == "_other":
         out = [(f["box"], "_other", f["name"]) for f in found]
     else:
-        mine = [f for f in found if f["name"] == FAM[o["label"]]]
+        mine = sorted((f for f in found if f["name"] == FAM[o["label"]]), key=lambda f: f.get("weak", False))
         if mine:
             b = mine[0]["box"]
             out.append((b, o["label"], mine[0]["name"]))

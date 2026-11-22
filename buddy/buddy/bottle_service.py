@@ -69,9 +69,12 @@ def center_crop(img, box=CENTER):
 
 
 class ShowTracker:
-    """bottle_shown once the same bottle is recognised in NEED (3) checks in a row; the same bottle
-    can only be shown again after it has been out of view for CLEAR_S."""
+    """bottle_shown once the same bottle is recognised in NEED (3) of the last WINDOW (4) checks, with
+    no other bottle among them; the same bottle can only be shown again after it has been out of
+    view for CLEAR_S."""
     NEED = 3      # ~0.75 s at 4 checks/s; stray one-frame guesses (e.g. "motrin" on an empty view) never get through
+    WINDOW = 4    # ...out of the last 4 checks: one missed frame (a hand over the label) no longer
+                  # restarts the count. Any OTHER bottle in the window blocks it.
     CLEAR_S = 1.5
 
     def __init__(self):
@@ -80,12 +83,13 @@ class ShowTracker:
         self.last_seen = {}
 
     def update(self, t, name, score):
-        self.hist = (self.hist + [name])[-self.NEED:]
+        self.hist = (self.hist + [name])[-self.WINDOW:]
         if name != "unknown":
             self.last_seen[name] = t
         if self.shown and t - self.last_seen.get(self.shown, -1e9) > self.CLEAR_S:
             self.shown = None
-        if name != "unknown" and name != self.shown and self.hist == [name] * self.NEED:
+        others = {h for h in self.hist if h not in ("unknown", name)}
+        if name != "unknown" and name != self.shown and self.hist.count(name) >= self.NEED and not others:
             self.shown = name
             return [{"type": "bottle_shown", "bottle": name, "score": round(score, 3)}]
         return []
