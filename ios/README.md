@@ -6,6 +6,7 @@ and when), then see the day at a glance:
 - every dose on a timeline
 - only the things that need them
 - whether their routine is changing, week against their own usual (the **Trends** tab)
+- a **notification** when a dose is taken, missed, or Squint steps in
 
 And without opening the app at all:
 - **Siri / Spotlight / Shortcuts:** *"Has Dinu taken his pills in Squint?"* answers in a sentence
@@ -47,6 +48,25 @@ To try live mode without the Pi, run the backend on the Mac with no camera (in `
 `python3 -m buddy.service --bottle-source ""`), and set the station to `http://localhost:8081` in the simulator. If an older
 station has no `/insights`, Today still works and Trends says it couldn't load.
 
+## Notifications
+
+`Notifier.swift` compares each `/today` with the last one it saw and sends one local notification
+per change. There is no push server and nothing to set up beyond allowing notifications.
+
+| Change | Notification | Level |
+|---|---|---|
+| taken | "Dinu took Tylenol": "At 8:02 AM. Squint saw it." | passive (list only, no sound); Settings → *Every dose taken* turns it off |
+| missed | "Dinu missed Tylenol" + Squint's reason | time sensitive, sound |
+| flagged | "Squint stepped in for Dinu" + Squint's reason | time sensitive, sound |
+
+- The first look each day only records what's there, so opening the app doesn't replay the morning.
+- **Open app:** every new Tab5 line and every 30 s. **Closed app:** a background app refresh
+  (`com.hackwestern.squint.refresh`), whenever iOS allows, ~15 min at best. To test: Xcode → Debug →
+  *Simulate Background Fetch*.
+- **Demo:** *Play* on Today sends the two Maya would get ("took Warfarin", then "stepped in").
+- The station's `--demo` mode logs no doses, so live notifications need the station started without
+  it (`SQUINT_DEMO= ./squint_start.sh`).
+
 ## Siri and the widget
 
 Both are built on `Glance` (`Shared/Glance.swift`): today boiled down to, per person, taken/total,
@@ -73,6 +93,7 @@ tools/make-icon.swift    draws the app icon (swift tools/make-icon.swift, from i
 Squint/
   SquintApp.swift        app entry, the floating tab bar, starts live following
   AppStore.swift         all state (@Observable): data, settings, Squint's state, demo playback
+  Notifier.swift         dose notifications: diffs /today, sends taken / missed / flagged
   Intents.swift          Siri and Shortcuts: check one person, or everyone; the answer card
   LabelParser.swift      reads a pharmacy label photo (Vision OCR) into a medication
   Views/

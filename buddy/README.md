@@ -52,6 +52,9 @@ buddy/
   insights.py        routine tracking: each person's last week against their own usual
                      (docs/decline-tracking.md), served as /insights
   faces.py           face detection (YuNet) + recognition (SFace)
+  colors.py          which bottle: label colour finds it, the label classifier confirms (docs/models.md)
+  intake.py          hand to mouth: MediaPipe palm detector near the mouth, while a dose waits
+  palmdet.py         the palm detector's pre/post-processing (OpenCV model zoo)
   presence.py        smooths per-frame faces into "who is at the counter"
   bottles.py         bottle recognition by embedding similarity
   bottle_service.py  / bottle_tracker.py   steady bottle decisions from the live camera
@@ -124,7 +127,7 @@ python tools/face_live.py     --source http://<pi>:8080/stream                  
 
 1. **People arrive.** The Tab5 gets `presence`, then `remind ...`, and the Nest says hello and what to
    take. Each person is greeted at most once every 2 minutes.
-2. **The right bottle is picked up.** The dose is pending. If intake confidence is ≥ 0.90 it
+2. **The right bottle is picked up.** The dose is pending. If hand-to-mouth confidence is ≥ 0.75 it
    auto-confirms after 2 s; otherwise the person answers on the Tab5 (`POST /doses/confirm`).
 3. **Someone else's bottle** shows `wrong` on the Tab5 and the Nest warns.
 4. **A high-risk medicine that was already taken today** shows `stop`, and the Nest says *"Stop, you
@@ -157,6 +160,6 @@ python3 tools/seed_history.py --clear           # remove everything it wrote (it
 curl localhost:8081/today
 curl 'localhost:8081/insights?days=30'                                           # routine tracking
 curl -X POST localhost:8081/tab5/send -d '{"line": "happy Well done!|Tylenol"}'   # drive the Tab5 face
-curl -X POST localhost:8081/intake    -d '{"person": "dinu", "confidence": 0.95}' # fake hand-to-mouth
+curl -X POST localhost:8081/intake    -d '{"person": "dinu", "confidence": 0.95}' # inject a hand-to-mouth reading
 curl -N localhost:8081/events                                                     # watch events live
 ```
