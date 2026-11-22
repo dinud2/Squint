@@ -19,6 +19,10 @@ REC_MODEL = os.path.join(HERE, "models", "face_recognition_sface_2021dec.onnx")
 GALLERY_DIR = os.path.join(HERE, "data", "faces")
 
 MIN_FACE_PX = 60        # smaller faces are too far away (or background people)
+# Only faces at least this wide (px, 960x544 frame) are "at the counter". Measured live: people
+# at the counter 116-290 px (5 % 134); someone 2-3 m behind them (judges, passers-by) is ~50-80
+# px. Smaller faces are ignored completely: no "I don't recognise you", nobody dropped/greeted.
+COUNTER_FACE_PX = float(os.environ.get("SQUINT_COUNTER_FACE_PX", "100"))
 DET_SCORE = 0.8
 # SFace cosine similarity: the model authors' same-person threshold is 0.363.
 # 0.40 let a similar-looking visitor through as Dinu (2026-11-21). Measured live on the Pi: the
