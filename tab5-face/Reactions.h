@@ -21,7 +21,8 @@ enum class Reaction {
   WrongPerson,  // Otto "embarrassed": eyes dart aside, sweat drop. Amber.
   Sleep,        // Otto "sleepy": eyes close, floating "z". Dim blue.
   Ask,          // "Did you take it?": small eyes on top, Yes / No buttons below (Ask.h).
-                // Kept last: the "next" / cycle code steps through the first 8 only.
+                // Kept after the first 8: the "next" / cycle code steps through those only.
+  Wink,         // The app logo: round eyes, the right one winks into a thick arch every 5 s. Holds.
 };
 
 struct ReactionState {
@@ -122,6 +123,7 @@ inline const char* name(Reaction r) {
     case Reaction::WrongPerson: return "wrong";
     case Reaction::Sleep:       return "sleep";
     case Reaction::Ask:         return "ask";
+    case Reaction::Wink:        return "wink";
   }
   return "idle";
 }

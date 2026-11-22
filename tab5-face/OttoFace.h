@@ -16,6 +16,7 @@
 //   wrong      lowered eyes glancing away                         amber
 //   sleep      closed eyes, slow breathing                        dim blue
 //   ask        small round eyes on top, Yes / No below (AskPanel.h)  white
+//   wink       the app logo: round eyes, the right one winks into an arch every 5 s  white
 
 #pragma once
 
@@ -647,6 +648,36 @@ class OttoFace {
           const float ex = x + ax, ey = kEyeY + D * 0.1f + bob(t, 14, 0.35f, kPi / 2);
           if (grow >= 1) stamp(key(9), (int)D + 16, ex, ey, [&](float px, float py) { lowered(px, py, 1); });
           else lowered(ex, ey, grow);
+        }
+        break;
+      }
+      case Reaction::Wink: {  // the app logo (ios/.../AppIcon): round left eye, right eye winks
+        // Proportions measured on the 1024 px icon, in eye diameters: eye gap 1.43; the arch's
+        // centre 0.18 below the eye centre, radius 0.44, thickness 0.26, from 199 to 341 degrees.
+        const float gap = D * 1.43f, wl = kWidth / 2 - gap / 2, wr = kWidth / 2 + gap / 2;
+        const float y = kEyeY + bob(t, 8, 0.35f);
+        if (grow >= 1) stamp(key(20), (int)D + 16, wl, y, [&](float px, float py) { blob(px, py, D, D, c); });
+        else blob(wl, y, D, D * grow, c);
+        // Right eye: a wink every 5 s (the first 0.7 s after "wink" arrives): squeeze shut, the
+        // logo's arch pops in and holds 1.4 s, then the eye opens again.
+        const float cyc = fmodf((now - changeMs_) / 1000.0f, 5.0f);
+        auto arch = [&](float px, float py, float k) {
+          stroke(px, py + D * 0.18f, D * 0.44f * k, 199, 341, D * 0.26f * std::max(0.3f, k), c);
+        };
+        if (cyc < 0.7f) {
+          blob(wr, y, D, D * grow, c);
+        } else if (cyc < 0.9f) {
+          blob(wr, y, D, std::max(10.0f, D * (1 - easeInOut((cyc - 0.7f) / 0.2f))), c);
+        } else if (cyc < 2.3f) {
+          const float k = easeOutBack((cyc - 0.9f) / 0.18f);
+          if (cyc - 0.9f >= 0.18f)
+            stamp(key(21), (int)(D * 1.3f), wr, y, [&](float px, float py) { arch(px, py, 1); });
+          else
+            arch(wr, y, k);
+        } else if (cyc < 2.6f) {
+          blob(wr, y, D, std::max(10.0f, D * easeInOut((cyc - 2.3f) / 0.3f)), c);
+        } else {
+          stamp(key(20), (int)D + 16, wr, y, [&](float px, float py) { blob(px, py, D, D, c); });
         }
         break;
       }

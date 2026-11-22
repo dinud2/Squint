@@ -169,7 +169,8 @@ static bool reactionFromName(const char* name, Reaction* out) {
   static const Reaction all[] = {Reaction::Idle,      Reaction::Greeting,
                                  Reaction::Reminder,  Reaction::Happy,
                                  Reaction::Concerned, Reaction::Stop,
-                                 Reaction::WrongPerson, Reaction::Sleep};
+                                 Reaction::WrongPerson, Reaction::Sleep,
+                                 Reaction::Wink};
   for (Reaction r : all) {
     if (strcmp(name, reactions::name(r)) == 0) {
       *out = r;
