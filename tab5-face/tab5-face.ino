@@ -203,6 +203,11 @@ void handleCommand(char* line) {
   // sleeping forever, and go back to sleep when the Pi answers again.
   static bool linkDown = false;
   if (strcmp(line, "offline") == 0) {
+    // The logo wink is for filming, often with no Pi at all: don't cover it with the notice.
+    if (reactions::get().reaction == Reaction::Wink) {
+      linkDown = true;
+      return;
+    }
     char* detail = args ? strchr(args, '|') : nullptr;
     if (detail) *detail++ = '\0';
     reactions::set(Reaction::Concerned, args ? args : "", detail ? detail : "", 0);
@@ -210,7 +215,7 @@ void handleCommand(char* line) {
     return;
   }
   if (strcmp(line, "online") == 0) {
-    if (linkDown) reactions::set(Reaction::Sleep);
+    if (linkDown && reactions::get().reaction != Reaction::Wink) reactions::set(Reaction::Sleep);
     linkDown = false;
     return;
   }
