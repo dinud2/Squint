@@ -8,7 +8,7 @@ Flow (medicine-buddy design):
   people arrive          -> Tab5 `presence`/`greet`/`remind`; Nest: "Hi Dinu, you take Tylenol and
                             Metformin. Kathy, you take Omega 3-6-9."
   right bottle picked    -> pending dose; Tab5 asks "Did you take it?". Intake confidence
-                            >= 0.90 auto-confirms after 2 s (Tab5 shows the check); otherwise
+                            >= 0.75 auto-confirms after 2 s (Tab5 shows the check); otherwise
                             the person answers on the Tab5 (POST /doses/confirm).
   someone else's bottle  -> Tab5 `wrong`; Nest warns (owner not at the counter)
   high-risk, taken today -> Tab5 `stop`; Nest: "Stop, you already took ... at 8:02"
@@ -26,7 +26,7 @@ import threading
 import time
 import urllib.request
 
-AUTO_CONFIRM = 0.90
+AUTO_CONFIRM = 0.75      # hand-to-mouth confidence that ticks Yes by itself (was 0.90: 1-2 frame detections only asked)
 UNSURE_AFTER_S = 60       # a bottle picked up but never confirmed within this long counts as "unsure"
 AUTO_DELAY_S = 2.0
 # One camera: people are recognised walking up, then show the bottle at chest height with their
