@@ -141,8 +141,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pi", default="172.20.10.9")
     ap.add_argument("--fullscreen", action="store_true")
-    ap.add_argument("--stream", help="default: the Pi's small preview (480x272, 5 fps). "
-                    "http://<pi>:8080/stream for the full camera (heavier on the Pi and Wi-Fi)")
+    ap.add_argument("--stream", help="default: the Pi's camera stream (http://<pi>:8080/stream, ~15 fps, "
+                    "served by camstream, so it never stalls while the Pi is busy recognising). "
+                    "http://<pi>:8081/preview.mjpg: small and light, but only as fast as the face loop")
     a = ap.parse_args()
     pi = Pi(a.pi)
     cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
@@ -154,7 +155,7 @@ def main():
     while True:
         try:
             if cam is None:
-                cam = Camera(a.stream or f"http://{a.pi}:8081/preview.mjpg")
+                cam = Camera(a.stream or f"http://{a.pi}:8080/stream")
             _, frame = cam.read()
             if frame.shape[1] < 960:             # the small preview: enlarge so the labels stay sharp
                 frame = cv2.resize(frame, (960, 544), interpolation=cv2.INTER_LINEAR)
