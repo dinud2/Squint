@@ -35,7 +35,7 @@ AT_COUNTER_S = 120
 # Bottles the camera knows but the app may not list (bottle id -> how to say it).
 KNOWN_BOTTLES = {"omega369": "Omega 3-6-9", "advil": "Advil", "motrin": "Motrin", "tylenol": "Tylenol",
                  "vitamind": "Vitamin D"}
-GREET_COOLDOWN_S = 120    # people step in and out at a counter: say hello at most once per 2 min
+GREET_COOLDOWN_S = 30     # people step in and out at a counter: say hello at most once per 30 s
 
 
 def join_names(xs):
@@ -184,7 +184,12 @@ class Coordinator:
         for pid in arrived:
             name, meds = self.store.name(pid), self.med_list(pid)
             if meds:
-                parts.append(f"{name}, today you take {join_names(meds)}.")
+                timed = []
+                for d in self.store.open_doses(pid):
+                    s = f"{self.store.med(d['med'])['name']} at {d['due']}"
+                    if s not in timed:
+                        timed.append(s)
+                parts.append(f"{name}, take your {join_names(timed)}.")
             elif self.store.upcoming(pid):
                 nxt = self.store.upcoming(pid)[0]
                 parts.append(f"{name}, nothing right now. Your next medicine is {self.store.med(nxt['med'])['name']} at {nxt['due']}.")

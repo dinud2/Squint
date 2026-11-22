@@ -14,6 +14,8 @@ HOMEPY=$HOMEDIR/.venv/bin/python
 mkdir -p /tmp/squint
 (cd "$HOMEDIR" && exec "$HOMEPY" -u server.py --local) > /tmp/squint/voice.log 2>&1 &
 VOICE=$!
+# The Pi re-sends its last line ("Hi Dinu.") on connect: wait for the voice service so it isn't lost.
+for i in $(seq 60); do grep -q listening /tmp/squint/voice.log 2>/dev/null && break; sleep 0.5; done
 "$VENV" -u "$HERE/tools/speak_events.py" --pi "$PI" > /tmp/squint/speak.log 2>&1 &
 SPEAK=$!
 trap 'kill $VOICE $SPEAK 2>/dev/null' EXIT INT TERM
