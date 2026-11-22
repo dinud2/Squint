@@ -1,8 +1,13 @@
+import BackgroundTasks
 import SwiftUI
 
 @main
 struct SquintApp: App {
     @State private var store = AppStore()
+    @Environment(\.scenePhase) private var phase
+    nonisolated static let refreshTask = "com.hackwestern.squint.refresh"
+
+    init() { Notifier.shared.start() }
 
     var body: some Scene {
         WindowGroup {
@@ -11,6 +16,19 @@ struct SquintApp: App {
                 .tint(Theme.accent)
                 .fontDesign(.rounded)
         }
+        .onChange(of: phase) { if phase == .background { Self.scheduleRefresh() } }
+        // iOS wakes the app now and then (about every 15 min at best) to check the station,
+        // so a dose taken or a STOP still turns into a notification when the app is closed.
+        .backgroundTask(.appRefresh(Self.refreshTask)) {
+            Self.scheduleRefresh()
+            await store.refresh()
+        }
+    }
+
+    nonisolated static func scheduleRefresh() {
+        let r = BGAppRefreshTaskRequest(identifier: refreshTask)
+        r.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        try? BGTaskScheduler.shared.submit(r)
     }
 }
 
@@ -50,6 +68,12 @@ struct RootView: View {
         .task { await store.refresh() }
         .task(id: store.useDemoData) {
             if !store.useDemoData { await store.followStation() }
+        }
+        .task(id: store.useDemoData) {
+            if !store.useDemoData { await store.pollWhileOpen() }
+        }
+        .task(id: store.onboarded) {
+            if store.onboarded { await Notifier.shared.requestPermission() }
         }
     }
 

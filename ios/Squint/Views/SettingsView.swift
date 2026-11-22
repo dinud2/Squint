@@ -5,6 +5,7 @@ struct SettingsView: View {
     @State private var message = "Good morning! It's time for your morning pills. Take your time."
     @State private var result: String?
     @State private var sending = false
+    @State private var notifyTaken = Notifier.shared.notifyTaken
 
     var body: some View {
         @Bindable var store = store
@@ -24,6 +25,15 @@ struct SettingsView: View {
                         HStack(spacing: 12) { Avatar(person: p, size: 34); Text(p.name) }
                             .padding(.vertical, 2)
                     }
+                }
+
+                Section {
+                    Toggle(isOn: $notifyTaken) { SettingLabel("Every dose taken", symbol: "checkmark.circle.fill", tint: Theme.green) }
+                        .onChange(of: notifyTaken) { Notifier.shared.notifyTaken = notifyTaken }
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    Text("Missed doses and anything Squint stops are always sent.")
                 }
 
                 Section {

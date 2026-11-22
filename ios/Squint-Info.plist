@@ -10,5 +10,14 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!-- Background checks of the station, so dose notifications arrive when the app is closed. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.hackwestern.squint.refresh</string>
+	</array>
 </dict>
 </plist>
