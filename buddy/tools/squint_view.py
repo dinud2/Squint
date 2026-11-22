@@ -49,6 +49,9 @@ class Pi:
         self.feed = []
         self.intake, self.intake_t = None, 0.0     # last hand-to-mouth result
         self.tab5, self.tab5_seq = "", 0          # last line sent to the Tab5
+        # The Pi remembers the last person for 2 min (bottles are shown face-out-of-view); the
+        # banner ignores that memory until someone is recognised after this view opened.
+        self.seen_since_start = False
         for fn in (self._poll, self._events, self._tab5):
             threading.Thread(target=fn, daemon=True).start()
 
@@ -57,6 +60,8 @@ class Pi:
             try:
                 self.bottle = get(self.api + "/bottles/last")
                 self.doses = get(self.api + "/doses/pending")
+                if self.doses.get("present"):
+                    self.seen_since_start = True
                 self.health = get(self.api + "/health")
                 self.ok = True
             except Exception:
@@ -149,7 +154,7 @@ def draw(frame, pi):
             label(frame, "hold the bottle here", (x0 + 6, y1 - 12), GREY, 0.55, 1)
     # top bar: who is here, what is being asked
     d = pi.doses if pi.ok else {}
-    here = [n.title() for n in d.get("at_counter", [])]
+    here = [n.title() for n in d.get("at_counter" if pi.seen_since_start else "present", [])]
     if not pi.ok:
         top, col = "Can't reach the Pi", RED
     elif d.get("pending"):
